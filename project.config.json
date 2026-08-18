@@ -1,0 +1,19 @@
+{
+  "slug": "packagebuilder",
+  "displayName": "PackageBuilder",
+  "createdAt": "2026-08-18",
+
+  "_note": "«stack» فقط تصمیم‌های اعلام‌شده است، نه وضعیتِ واقعیِ نصب. نصب‌بودن فقط با مدرکِ واقعی تأیید می‌شود (لینکِ node_modules، خروجیِ docker compose ps، وجودِ .venv). این فایل می‌گوید «چه چیزی را انتخاب کرده‌ام»، نه «چه چیزی کار می‌کند».",
+
+  "_pending": "استکِ زیر در docs/decisions/0002-tool-stack.md فقط «پیشنهادی» است و تأیید نشده — برای همین همه null است و package.json هم ساخته نشده.",
+
+  "stack": {
+    "language": null,
+    "packageManager": null,
+    "terminalBackend": null,
+    "terminalFrontend": null,
+    "httpServer": null,
+    "ui": null,
+    "e2e": null
+  }
+}
