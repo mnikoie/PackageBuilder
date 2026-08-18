@@ -8,15 +8,18 @@
 
 import { scaffoldProject } from "./core/scaffold.mjs";
 import { probeProject, PRESENT, ABSENT, UNKNOWN } from "./core/detect.mjs";
+import { validateRegistry } from "./core/registry.mjs";
+import { resolveRegistry } from "./core/resolve.mjs";
 import { startServer, DEFAULT_PORT } from "./server/server.mjs";
 
 const USAGE = `
 PackageBuilder — ساختِ پروژهٔ نو با اسکلتِ مستقل از تکنولوژی
 
   استفاده:
-    node src/cli.mjs new   <مسیرِ پوشه> [گزینه‌ها]   ساختِ پروژهٔ نو
-    node src/cli.mjs probe <مسیرِ پوشه>              گزارشِ وضعیتِ واقعی
-    node src/cli.mjs serve [--port <شماره>]          همان گزارش، در مرورگر
+    node src/cli.mjs new    <مسیرِ پوشه> [گزینه‌ها]  ساختِ پروژهٔ نو
+    node src/cli.mjs probe  <مسیرِ پوشه>             گزارشِ وضعیتِ واقعی
+    node src/cli.mjs stack  <مسیرِ پوشه>             تصمیم‌ها و گزینه‌هایشان
+    node src/cli.mjs serve  [--port <شماره>]         همان گزارش، در مرورگر
 
   گزینه‌های new:
     --name "<نامِ نمایشی>"   پیش‌فرض: نامِ خودِ پوشه
@@ -69,7 +72,7 @@ function main() {
     console.log(USAGE);
     process.exit(0);
   }
-  if (!["new", "probe", "serve"].includes(opts.command)) {
+  if (!["new", "probe", "stack", "serve"].includes(opts.command)) {
     console.error(`\n✗ دستورِ ناشناخته: ${opts.command}`);
     console.error(USAGE);
     process.exit(2);
@@ -84,6 +87,7 @@ function main() {
   }
 
   if (opts.command === "probe") return runProbe(opts.targetPath);
+  if (opts.command === "stack") return runStack(opts.targetPath);
 
   const result = scaffoldProject({
     targetPath: opts.targetPath,
@@ -179,6 +183,57 @@ function runProbe(targetPath) {
   }
 
   console.log("");
+}
+
+/**
+ * تصمیم‌ها و گزینه‌هایشان، با وضعیتِ واقعیِ هر گزینه.
+ * هیچ چیزی را عوض نمی‌کند — فقط نشان می‌دهد.
+ */
+function runStack(targetPath) {
+  const probe = probeProject(targetPath);
+  if (!probe.exists || !probe.isDirectory) {
+    console.error(`\n✗ ${probe.error}: ${probe.path}\n`);
+    process.exit(1);
+  }
+
+  const problems = validateRegistry();
+  if (problems.length) {
+    console.error(`\n✗ خودِ رجیستری ایراد دارد:`);
+    for (const p of problems) console.error(`  • ${p}`);
+    process.exit(1);
+  }
+
+  const out = resolveRegistry(probe.path, { probe });
+  const mark = (s) => (s === PRESENT ? "✓" : s === ABSENT ? "✗" : "؟");
+
+  console.log(`\nتصمیم‌های پروژه: ${probe.path}`);
+  console.log(`(✓ نصب است   ✗ نصب نیست   ؟ نامعلوم)\n`);
+
+  for (const cat of out.categories) {
+    let headline;
+    if (cat.conflict) headline = `⚠ ناسازگاری: ${cat.conflict.join(" و ")} هر دو نصب‌اند`;
+    else if (cat.chosen) headline = `✓ ${cat.options.find((o) => o.id === cat.chosen).label}`;
+    else if (cat.uncertain) headline = "؟ نامعلوم";
+    else headline = "— تصمیم گرفته نشده";
+
+    console.log(`${cat.label}  →  ${headline}`);
+    for (const opt of cat.options) {
+      const flags = [];
+      if (opt.missingRequirements.length) flags.push(`پیش‌نیاز: ${opt.missingRequirements.join("، ")}`);
+      if (!opt.verified) flags.push("نصبش آزمایش‌نشده");
+      const suffix = flags.length ? `  [${flags.join(" | ")}]` : "";
+      console.log(`    ${mark(opt.state)} ${opt.label.padEnd(34)} ${opt.evidence}${suffix}`);
+    }
+    console.log("");
+  }
+
+  if (out.conflicts.length) {
+    console.log(`⚠ ${out.conflicts.length} ناسازگاری پیدا شد. در هر دسته باید فقط یک گزینه نصب باشد.\n`);
+  }
+  console.log(
+    `توجه: فرمان‌های نصبِ ${out.unverified.length} تکنولوژی هنوز واقعاً اجرا و تأیید نشده‌اند ` +
+      `(قدمِ ۷). تا آن موقع «آزمایش‌نشده» علامت خورده‌اند.\n`,
+  );
 }
 
 /** سرورِ رابطِ کاربری. فقط-خواندنی و فقط روی 127.0.0.1. */
