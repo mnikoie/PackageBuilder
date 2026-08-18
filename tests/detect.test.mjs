@@ -180,11 +180,25 @@ describe("detectMonorepoTool", () => {
     assert.equal(res.tool, "Turborepo");
   });
 
-  test("فقط pnpm-workspace → present با ابزارِ ساده", () => {
-    const dir = fixture("mono-plain", { "pnpm-workspace.yaml": "" });
+  test("pnpm-workspace با بخشِ packages → present با ابزارِ ساده", () => {
+    const dir = fixture("mono-plain", { "pnpm-workspace.yaml": 'packages:\n  - "apps/*"\n' });
     const res = detectMonorepoTool(dir);
     assert.equal(res.state, PRESENT);
     assert.match(res.tool, /pnpm workspaces/);
+    assert.equal(res.toolId, "pnpm-workspaces");
+  });
+
+  // pnpm ۱۱ همین فایل را برای تنظیماتِ خودش هم می‌سازد. نصبِ یک پکیجِ
+  // دارایِ اسکریپتِ بیلد (better-sqlite3) فایلی می‌سازد که فقط allowBuilds
+  // دارد — و آن مونوریپو نیست. در اجرای واقعی دیده شد.
+  test("pnpm-workspace بدونِ packages → absent (فقط تنظیماتِ pnpm)", () => {
+    const dir = fixture("mono-settings-only", {
+      "pnpm-workspace.yaml": "allowBuilds:\n  better-sqlite3: true\n",
+    });
+    const res = detectMonorepoTool(dir);
+    assert.equal(res.state, ABSENT);
+    assert.equal(res.toolId, null);
+    assert.match(res.evidence, /packages ندارد/);
   });
 
   test("هیچ‌کدام → absent", () => {
@@ -326,6 +340,40 @@ describe("findMismatches", () => {
       monorepo: { tool: "Turborepo" },
     });
     assert.equal(out.find((m) => m.field === "stack.database").severity, "unknown");
+  });
+
+  // سه باگِ واقعی که فقط اجرای زنده نشانشان داد — تا دوباره برنگردند.
+
+  test("مونوریپویِ درست‌نصب‌شده تضاد نیست — شناسه با شناسه سنجیده می‌شود", () => {
+    // نگارشِ قبل «nx» را با برچسبِ نمایشی «Nx» می‌سنجید و همیشه تضاد می‌دید.
+    const out = findMismatches({
+      declared: { stack: { monorepoTool: "nx" } },
+      docker: { file: "deployment/docker-compose.yml", services: {} },
+      monorepo: { tool: "Nx", toolId: "nx", evidence: "nx.json هست" },
+    });
+    assert.deepEqual(out, []);
+  });
+
+  test("مونوریپویِ واقعاً متفاوت هنوز تضاد است", () => {
+    const out = findMismatches({
+      declared: { stack: { monorepoTool: "turborepo" } },
+      docker: { file: "deployment/docker-compose.yml", services: {} },
+      monorepo: { tool: "Nx", toolId: "nx", evidence: "nx.json هست" },
+    });
+    assert.equal(out.length, 1);
+    assert.equal(out[0].severity, "conflict");
+  });
+
+  test("دیتابیسِ بی‌کانتینر (SQLite) → unknown، نه conflict", () => {
+    // SQLite یک فایل است، پس هرگز سرویسِ compose ندارد. از روی خودِ پروژه
+    // نمی‌شود فهمید «سرویس جا مانده» یا «اصلاً کانتینر ندارد» — پس نامعلوم.
+    const out = findMismatches({
+      declared: { stack: { database: "sqlite" } },
+      docker: { file: "deployment/docker-compose.yml", services: {} },
+      monorepo: { tool: null, toolId: null, evidence: "" },
+    });
+    assert.equal(out.length, 1);
+    assert.equal(out[0].severity, "unknown");
   });
 
   test("همه‌چیز جور → بدونِ ایراد", () => {

@@ -100,19 +100,43 @@ export function detectPackageManager(projectPath) {
 /** ابزارِ مونوریپو — فایلِ کانفیگ **و** نصبِ واقعیِ خودش. */
 export function detectMonorepoTool(projectPath) {
   const candidates = [
-    ["turbo.json", "turbo", "Turborepo"],
-    ["nx.json", "nx", "Nx"],
+    ["turbo.json", "turbo", "Turborepo", "turborepo"],
+    ["nx.json", "nx", "Nx", "nx"],
   ];
-  for (const [configFile, pkg, label] of candidates) {
+  for (const [configFile, pkg, label, id] of candidates) {
     if (!existsSync(join(projectPath, configFile))) continue;
     const installed = detectNpmPackage(projectPath, { name: pkg });
-    if (installed.state === PRESENT) return { ...present(`${configFile} هست و ${pkg} نصب است`), tool: label };
-    return { ...absent(`${configFile} هست ولی ${pkg} نصب نیست — اعلام شده، نصب نشده`), tool: null };
+    if (installed.state === PRESENT) return { ...present(`${configFile} هست و ${pkg} نصب است`), tool: label, toolId: id };
+    return { ...absent(`${configFile} هست ولی ${pkg} نصب نیست — اعلام شده، نصب نشده`), tool: null, toolId: null };
   }
-  if (existsSync(join(projectPath, "pnpm-workspace.yaml"))) {
-    return { ...present("pnpm-workspace.yaml هست، بدونِ ابزارِ اضافه"), tool: "فقط pnpm workspaces" };
+  // وجودِ pnpm-workspace.yaml به‌تنهایی مدرکِ مونوریپو نیست.
+  //
+  // pnpm ۱۱ همین فایل را به‌عنوانِ جایِ تنظیماتش هم به‌کار می‌برد: نصبِ یک
+  // پکیجِ دارایِ اسکریپتِ بیلد (مثلِ better-sqlite3) خودش این فایل را می‌سازد و
+  // فقط allowBuilds درونش می‌نویسد. تا قبل از این اصلاح، همان فایل باعث می‌شد
+  // ابزار بگوید «مونوریپو هست» در حالی که کاربر چنین تصمیمی نگرفته بود —
+  // یعنی دقیقاً همان سبزِ دروغینی که این ابزار برای ریشه‌کنی‌اش نوشته شد.
+  //
+  // معیارِ درست: فایل باید واقعاً بگوید کدام پکیج‌ها عضوِ این مجموعه‌اند.
+  const wsFile = join(projectPath, "pnpm-workspace.yaml");
+  if (existsSync(wsFile)) {
+    let declaresPackages = false;
+    try {
+      declaresPackages = /^packages:\s*$/m.test(readFileSync(wsFile, "utf8"));
+    } catch {
+      // فایل هست ولی خوانده نشد — این «نامعلوم» است، نه «نیست»
+      return { ...unknown("pnpm-workspace.yaml هست ولی خوانده نشد"), tool: null, toolId: null };
+    }
+    if (declaresPackages) {
+      return { ...present("pnpm-workspace.yaml با بخشِ packages هست، بدونِ ابزارِ اضافه"), tool: "فقط pnpm workspaces", toolId: "pnpm-workspaces" };
+    }
+    return {
+      ...absent("pnpm-workspace.yaml هست ولی بخشِ packages ندارد — فقط تنظیماتِ pnpm است"),
+      tool: null,
+      toolId: null,
+    };
   }
-  return { ...absent("نه turbo.json، نه nx.json، نه pnpm-workspace.yaml"), tool: null };
+  return { ...absent("نه turbo.json، نه nx.json، نه pnpm-workspace.yaml"), tool: null, toolId: null };
 }
 
 /** وابستگی‌های node یک app واقعاً نصب شده‌اند؟ مدرک: خودِ پوشهٔ node_modules. */
@@ -293,11 +317,15 @@ export function findMismatches({ declared, docker, monorepo }) {
       declaredDb.toLowerCase().includes(name.toLowerCase()),
     );
     if (!svc) {
+      // اینجا واقعاً نمی‌دانیم: یا سرویس جا مانده، یا این دیتابیس اصلاً
+      // کانتینر ندارد (SQLite یک فایل است). تشخیص از روی خودِ پروژه
+      // ممکن نیست، پس «نامعلوم» — نه «تضاد». ترجمهٔ نامعلوم به حکم،
+      // همان کاری است که نسخهٔ قبلیِ این ابزار می‌کرد.
       out.push({
         field: "stack.database",
         declared: declaredDb,
-        reality: "سرویسی با این نام در فایلِ compose نیست",
-        severity: "conflict",
+        reality: `سرویسی به این نام در ${docker.file} نیست — یا این دیتابیس کانتینر ندارد`,
+        severity: "unknown",
       });
     } else if (svc[1].state === ABSENT) {
       out.push({
@@ -316,7 +344,10 @@ export function findMismatches({ declared, docker, monorepo }) {
     }
   }
 
-  if (stack.monorepoTool && monorepo.tool !== stack.monorepoTool) {
+  // مقایسه باید شناسه با شناسه باشد. نگارشِ قبل شناسهٔ ثبت‌شده («nx») را با
+  // برچسبِ نمایشی («Nx») می‌سنجید، پس هر مونوریپویِ درست‌نصب‌شده «تضاد»
+  // علامت می‌خورد — در اجرای واقعی دیده شد.
+  if (stack.monorepoTool && (monorepo.toolId ?? monorepo.tool) !== stack.monorepoTool) {
     out.push({
       field: "stack.monorepoTool",
       declared: stack.monorepoTool,

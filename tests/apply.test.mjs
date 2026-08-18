@@ -18,7 +18,7 @@ import { spawnSync } from "node:child_process";
 import {
   applyEnvVars, generateCompose, composeServicesFor, nextDecisionNumber,
   writeDecisionDoc, updateStackConfig, applyTechnology, revertTechnology, removeEnvVars,
-  GENERATED_MARKER,
+  ensurePnpmWorkspace, GENERATED_MARKER,
 } from "../src/core/apply.mjs";
 import { scaffoldProject } from "../src/core/scaffold.mjs";
 import { technologyById } from "../src/core/registry.mjs";
@@ -509,3 +509,42 @@ ${env}`);
     assert.equal(cfg.stack.storage, "minio");
   });
 });
+
+describe("ensurePnpmWorkspace", () => {
+  // باگِ واقعی: writeFile روی فایلِ موجود دست نمی‌زند (درست است)، ولی
+  // pnpm ۱۱ خودش pnpm-workspace.yaml را برای allowBuilds می‌سازد. نتیجه: Nx نصب
+  // می‌شد، ابزار «موفق» می‌گفت، ولی packages هرگز نوشته نمی‌شد.
+  const TEMPLATE = ["packages:", '  - "apps/*"', "", "strictDepBuilds: false", ""].join("\n");
+
+  test("فایل نباشد → همان قالب نوشته می‌شود", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pb-ws-"));
+    const res = ensurePnpmWorkspace(dir, TEMPLATE);
+    assert.equal(res.created, true);
+    assert.equal(readFileSync(join(dir, "pnpm-workspace.yaml"), "utf8"), TEMPLATE);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("فایلِ تنظیماتیِ pnpm → packages اضافه می‌شود و allowBuilds می‌ماند", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pb-ws-"));
+    writeFileSync(join(dir, "pnpm-workspace.yaml"), "allowBuilds:\n  nx: true\n", "utf8");
+    const res = ensurePnpmWorkspace(dir, TEMPLATE);
+    assert.deepEqual(res.added, ["packages", "strictDepBuilds"]);
+    const out = readFileSync(join(dir, "pnpm-workspace.yaml"), "utf8");
+    assert.match(out, /^packages:/m);
+    assert.match(out, /allowBuilds:/);
+    assert.match(out, /nx: true/);
+    assert.match(out, /^strictDepBuilds: false$/m);
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  test("فایلِ کامل → دست نمی‌خورد", () => {
+    const dir = mkdtempSync(join(tmpdir(), "pb-ws-"));
+    const mine = ["packages:", '  - "mine/*"', "strictDepBuilds: false", ""].join("\n");
+    writeFileSync(join(dir, "pnpm-workspace.yaml"), mine, "utf8");
+    const res = ensurePnpmWorkspace(dir, TEMPLATE);
+    assert.equal(res.changed, false);
+    assert.equal(readFileSync(join(dir, "pnpm-workspace.yaml"), "utf8"), mine);
+    rmSync(dir, { recursive: true, force: true });
+  });
+});
+

@@ -71,6 +71,48 @@ export function applyEnvVars(projectPath, { techLabel, vars }) {
  * ما این فایل را خودمان می‌سازیم، پس ادغامِ سطری بی‌خطر است. اگر فایل نبود،
  * ساخته نمی‌شود: بی workspace، این تنظیم جایی ندارد.
  */
+/**
+ * مطمئن شو pnpm-workspace.yaml واقعاً «workspace» را اعلام کرده.
+ *
+ * چرا writeFile کافی نبود: writeFile عمداً روی فایلِ موجود دست
+ * نمی‌زند (تا کارِ کاربر را پاک نکند). ولی pnpm ۱۱ خودش همین فایل را
+ * برای تنظیماتش می‌سازد (allowBuilds). نتیجه در اجرای واقعی دیده شد: Nx
+ * نصب شد، ابزار «موفق» گفت، ولی بخشِ packages هرگز نوشته نشد — یعنی
+ * مونوریپویی که appهایش را نمی‌بیند.
+ *
+ * پس این گام ادغام می‌کند: فایلِ نبود → همان قالب را می‌نویسد (دقیقاً
+ * مثلِ قبل)؛ فایلِ بود → فقط آنچه کم است را اضافه می‌کند و بقیه را
+ * دست‌نخورده می‌گذارد.
+ */
+export function ensurePnpmWorkspace(projectPath, content) {
+  const file = join(projectPath, "pnpm-workspace.yaml");
+  if (!existsSync(file)) {
+    writeFileSync(file, content, "utf8");
+    return { changed: true, created: true };
+  }
+
+  let text = readFileSync(file, "utf8");
+  const added = [];
+
+  if (!/^packages:\s*$/m.test(text)) {
+    const block = content
+      .split(/\r?\n/)
+      .filter((l) => /^packages:\s*$/.test(l) || /^\s+-\s/.test(l))
+      .join("\n");
+    text = block + "\n\n" + text.replace(/^\uFEFF/, "");
+    added.push("packages");
+  }
+
+  if (!/^strictDepBuilds:/m.test(text)) {
+    text = text.replace(/\s*$/, "") + "\nstrictDepBuilds: false\n";
+    added.push("strictDepBuilds");
+  }
+
+  if (!added.length) return { changed: false, reason: "از قبل کامل بود" };
+  writeFileSync(file, text, "utf8");
+  return { changed: true, added };
+}
+
 export function allowPnpmBuilds(projectPath, packages) {
   const file = join(projectPath, "pnpm-workspace.yaml");
   if (!existsSync(file)) return { changed: false, reason: "فایلِ workspace نیست" };
@@ -469,6 +511,13 @@ export async function applyTechnology({
       continue;
     }
 
+    if (step.kind === "pnpmWorkspace") {
+      planned.push({ kind: "writeFile", path: "pnpm-workspace.yaml" });
+      if (dryRun) continue;
+      performed.push({ kind: "pnpmWorkspace", ...ensurePnpmWorkspace(projectPath, step.content) });
+      continue;
+    }
+
     if (step.kind === "writeFile") {
       planned.push({ kind: "writeFile", path: step.path });
       if (dryRun) continue;
@@ -483,7 +532,7 @@ export async function applyTechnology({
       continue;
     }
 
-    if (step.kind === "pnpmAddDev") {
+    if (step.kind === "pnpmAddDev" || step.kind === "pnpmAdd") {
       // pnpm ۱۰+ اسکریپتِ بیلدِ پکیج‌ها را بی‌اجازه اجرا نمی‌کند و با
       // [ERR_PNPM_IGNORED_BUILDS] کدِ خروجِ غیرصفر می‌دهد — یعنی نصب ناقص است.
       // (nx و cypress هر دو به آن خوردند.) اجازه را از قبل در فایلِ workspace
@@ -496,9 +545,23 @@ export async function applyTechnology({
       //
       // این تنها شرطِ داخلِ موتور است، و عمداً: مربوط به قلقِ خودِ pnpm است،
       // نه به یک تکنولوژیِ خاص. وگرنه هر رکوردِ رجیستری باید دو نسخه داشت.
-      const inWorkspace = existsSync(join(projectPath, "pnpm-workspace.yaml"));
-      const flag = inWorkspace ? "-Dw" : "-D";
-      const command = `pnpm add ${flag} ${step.packages.join(" ")}`;
+      //
+      // pnpmAdd همان کار را برای وابستگیِ معمولی می‌کند (نه ابزارِ توسعه):
+      // درایورِ دیتابیس جزوِ خودِ برنامه است، پس -D نمی‌گیرد.
+      //
+      // معیارِ «داخلِ workspace» وجودِ فایل نیست، داشتنِ بخشِ packages است: pnpm ۱۱
+      // همین فایل را برای تنظیماتِ خودش هم می‌سازد (allowBuilds)، و آن فایلِ تنظیماتی
+      // اصلاً workspace نیست. آزموده شد: با چنین فایلی، pnpm پرچمِ -w نمی‌خواهد.
+      const wsFile = join(projectPath, "pnpm-workspace.yaml");
+      const inWorkspace = existsSync(wsFile) && /^packages:\s*$/m.test(readFileSync(wsFile, "utf8"));
+      const dev = step.kind === "pnpmAddDev";
+      const flag = inWorkspace ? (dev ? "-Dw" : "-w") : dev ? "-D" : "";
+      // پرچمِ رسمیِ خودِ pnpm برای اجازهٔ بیلد. لازم است چون نوشتنِ اجازه در
+      // فایل، وقتی فایل هنوز ساخته نشده، کاری نمی‌کند — و در پروژهٔ تک‌پکیجی
+      // همیشه همین طور است. بی این پرچم، better-sqlite3 نصب می‌شد ولی بیلد رد
+      // می‌شد و pnpm کلِ نصب را شکست‌خورده اعلام می‌کرد.
+      const allow = step.allowBuild?.length ? `--allow-build=${step.allowBuild.join(",")}` : "";
+      const command = ["pnpm add", flag, allow, step.packages.join(" ")].filter(Boolean).join(" ");
       planned.push({ kind: "cli", command });
       if (dryRun) continue;
       if (!terminal) return { ok: false, error: "ترمینالی برای اجرای فرمان داده نشد." };
