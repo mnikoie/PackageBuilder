@@ -1,0 +1,24 @@
+# روی ویندوز، بدونِ این فایل، git مرتب هشدارِ «LF will be replaced by CRLF»
+# می‌دهد و diffها الکی پرِ تغییرِ خطِ نامرئی می‌شوند. این یکی از آن چند فایلی
+# است که واقعاً هر پروژه‌ای با هر تکنولوژی به آن نیاز دارد.
+
+* text=auto eol=lf
+
+# این‌ها باید CRLF بمانند وگرنه روی ویندوز اجرا نمی‌شوند.
+*.bat  text eol=crlf
+*.cmd  text eol=crlf
+*.ps1  text eol=crlf
+
+# باینری‌ها هرگز نباید normalize شوند.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.ico  binary
+*.pdf  binary
+*.zip  binary
+*.ttf  binary
+*.woff binary
+*.woff2 binary
+*.docx binary
+*.xlsx binary

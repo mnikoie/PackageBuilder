@@ -1,0 +1,15 @@
+{
+  "name": "packagebuilder",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ابزارِ لوکالِ ساختِ پروژه — قدم‌به‌قدم، با مدرکِ واقعی",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "pb": "node src/cli.mjs",
+    "test": "node --test \"tests/**/*.test.mjs\""
+  },
+  "_note": "هیچ وابستگی‌ای ندارد و نباید داشته باشد تا قدمِ ۵ (ترمینالِ واقعی) که node-pty و ws و xterm اضافه می‌شوند. قدم‌های ۲ و ۳ فقط با کتابخانه‌های خودِ Node نوشته می‌شوند."
+}

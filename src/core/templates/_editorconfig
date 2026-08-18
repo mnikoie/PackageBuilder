@@ -1,0 +1,26 @@
+# مستقل از زبان و ادیتور — VS Code / JetBrains / Vim همه این را می‌فهمند.
+# هر پروژه‌ای با هر تکنولوژی به این نیاز دارد، چون فقط دربارهٔ «شکلِ فایلِ متنی» است.
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 2
+
+# در مارک‌داون، دو فاصلهٔ آخرِ خط معنا دارد (شکستِ خط) — پاکش نکن.
+[*.md]
+trim_trailing_whitespace = false
+
+# قراردادِ رایجِ خودِ این زبان‌ها ۴ فاصله است.
+[*.{py,go,rs,java,cs,php}]
+indent_size = 4
+
+[Makefile]
+indent_style = tab
+
+# اسکریپت‌های ویندوزی با LF درست اجرا نمی‌شوند.
+[*.{bat,cmd,ps1}]
+end_of_line = crlf
