@@ -1,25 +1,52 @@
 /**
  * سرورِ لوکالِ رابطِ کاربری.
  *
- * قدمِ ۴ عمداً فقط «آینه» است: هیچ مسیری چیزی را عوض نمی‌کند، نمی‌نویسد، و
- * فرمانی اجرا نمی‌کند. فقط خروجیِ موتورِ تشخیص را نشان می‌دهد.
+ * ---- امنیت: چرا این‌قدر سخت‌گیری ----
+ * از قدمِ ۵ به بعد این سرور یک قابلیتِ خطرناک دارد: اجرای فرمان در یک
+ * پاورشلِ واقعی. یعنی هر کسی که بتواند به آن درخواست بفرستد، می‌تواند روی این
+ * کامپیوتر هر کاری بکند.
  *
- * دو نکتهٔ امنیتیِ عمدی:
- * - فقط به 127.0.0.1 گوش می‌دهد، نه 0.0.0.0. این سرور مسیرهای دلخواهِ
- *   فایل‌سیستم را می‌خواند؛ نباید از بیرونِ همین کامپیوتر قابلِ دسترس باشد.
- * - فقط یک فایلِ ثابت سِرو می‌شود (همان صفحه). هیچ سِروِ پوشه‌ای نیست، پس
- *   حملهٔ «../» معنا ندارد.
+ * و «فقط لوکال است» کافی نیست: هر صفحهٔ وبی که در مرورگرت باز باشد می‌تواند
+ * به http://127.0.0.1:4600 درخواست بفرستد. نسخهٔ قبلیِ این ابزار مسیرِ
+ * `GET /run?command=...` داشت بدونِ هیچ محافظتی — یعنی یک تبِ مخرب می‌توانست
+ * با یک <img> ساده فرمان اجرا کند.
+ *
+ * پس چهار لایه:
+ *   ۱. فقط 127.0.0.1 (نه 0.0.0.0) — از شبکه در دسترس نیست.
+ *   ۲. اجرای فرمان فقط با POST — تا با <img> و <link> و لینکِ ساده نشود.
+ *   ۳. توکنِ تصادفیِ هر بار اجرا، که فقط داخلِ همان صفحه‌ای است که خودمان
+ *      سِرو می‌کنیم. صفحهٔ بیگانه آن را نمی‌داند (Same-Origin جلوی خواندنش را
+ *      می‌گیرد).
+ *   ۴. بررسیِ Origin — درخواستِ آمده از هر مبدأِ دیگری رد می‌شود.
  */
 
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { randomBytes, timingSafeEqual } from "node:crypto";
+import { WebSocketServer } from "ws";
+import pty from "node-pty";
 
 import { probeProject } from "../core/detect.mjs";
+import { createTerminal } from "./terminal.mjs";
 
-const PUBLIC_DIR = join(dirname(fileURLToPath(import.meta.url)), "public");
+const HERE = dirname(fileURLToPath(import.meta.url));
+const PUBLIC_DIR = join(HERE, "public");
+const NODE_MODULES = join(HERE, "..", "..", "node_modules");
+
 export const DEFAULT_PORT = 4600;
+
+/**
+ * فایل‌های کتابخانه‌ای که سِرو می‌شوند — فهرستِ سفیدِ صریح، نه سِروِ پوشه.
+ * پس حملهٔ «../» اصلاً معنا ندارد.
+ */
+const VENDOR = {
+  "/vendor/xterm.js": join(NODE_MODULES, "@xterm/xterm/lib/xterm.js"),
+  "/vendor/xterm.css": join(NODE_MODULES, "@xterm/xterm/css/xterm.css"),
+  "/vendor/addon-fit.js": join(NODE_MODULES, "@xterm/addon-fit/lib/addon-fit.js"),
+};
+const MIME = { ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8" };
 
 function sendJson(res, status, body) {
   const payload = JSON.stringify(body);
@@ -31,48 +58,218 @@ function sendJson(res, status, body) {
   res.end(payload);
 }
 
-function handleProbe(res, url) {
-  const target = (url.searchParams.get("path") || "").trim();
-  if (!target) {
-    return sendJson(res, 400, { ok: false, error: "مسیرِ پوشه داده نشده." });
-  }
-  try {
-    return sendJson(res, 200, { ok: true, probe: probeProject(target) });
-  } catch (err) {
-    // خواندنِ یک مسیرِ عجیب نباید کلِ سرور را بخواباند.
-    return sendJson(res, 500, { ok: false, error: `خطا در بررسی: ${err.message}` });
-  }
+/** مقایسهٔ توکن در زمانِ ثابت، تا از روی زمانِ پاسخ نشود حدسش زد. */
+function tokenMatches(expected, given) {
+  if (typeof given !== "string" || given.length !== expected.length) return false;
+  return timingSafeEqual(Buffer.from(expected), Buffer.from(given));
 }
 
-export function createApp() {
-  return createServer((req, res) => {
-    const url = new URL(req.url, "http://127.0.0.1");
+/**
+ * بدنهٔ JSON، با سقفِ حجم تا حافظه پر نشود.
+ *
+ * وقتی از حد رد شد، سوکت را نمی‌بندیم — بقیه‌اش را می‌ریزیم دور و پاسخِ ۴۱۳
+ * می‌دهیم. اگر سوکت را می‌بستیم، طرفِ مقابل به‌جای پیامِ روشن، خطای مبهمِ
+ * ECONNRESET می‌گرفت.
+ *
+ * ولی بی‌نهایت هم صبر نمی‌کنیم: بعدِ چند برابرِ سقف، اتصال قطع می‌شود.
+ */
+function readJsonBody(req, limit = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    const hardLimit = limit * 20;
+    let size = 0;
+    let tooLarge = false;
+    const chunks = [];
+
+    req.on("data", (c) => {
+      size += c.length;
+      if (size > hardLimit) {
+        req.destroy();
+        return;
+      }
+      if (size > limit) {
+        tooLarge = true;
+        chunks.length = 0; // چیزی که از حد گذشته را نگه نمی‌داریم
+        return;
+      }
+      chunks.push(c);
+    });
+
+    req.on("end", () => {
+      if (tooLarge) {
+        const err = new Error("بدنهٔ درخواست بیش از حد بزرگ است.");
+        err.status = 413;
+        return reject(err);
+      }
+      if (chunks.length === 0) return resolve({});
+      try {
+        resolve(JSON.parse(Buffer.concat(chunks).toString("utf8")));
+      } catch (err) {
+        reject(new Error(`JSONِ نامعتبر: ${err.message}`));
+      }
+    });
+    req.on("error", reject);
+  });
+}
+
+export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } = {}) {
+  const token = randomBytes(24).toString("hex");
+  const term = terminal ?? createTerminal({ pty });
+
+  /**
+   * مبدأ فقط وقتی پذیرفته می‌شود که با میزبانِ خودِ همین درخواست یکی باشد.
+   * (مقایسه با Host، نه با یک پورتِ ثابت — چون پورت می‌تواند در زمانِ اجرا
+   * عوض شود، مثلاً پورتِ صفر در تست.)
+   *
+   * درخواستِ بدونِ Origin پذیرفته می‌شود (مثلِ curl یا خودِ خط‌فرمان)؛ محافظتِ
+   * اصلی توکن است، و این لایه فقط دفاعِ اضافه در برابرِ صفحهٔ مرورگرِ بیگانه است.
+   */
+  function originAllowed(req) {
+    const origin = req.headers.origin;
+    if (!origin) return true;
+
+    let originHost;
+    try { originHost = new URL(origin).host; } catch { return false; }
+
+    const reqHost = req.headers.host || "";
+    if (originHost === reqHost) return true;
+
+    // localhost و 127.0.0.1 روی همان پورت، یک چیزند.
+    const samePort = originHost.split(":")[1] === reqHost.split(":")[1];
+    const localNames = new Set(["localhost", "127.0.0.1", "[::1]"]);
+    return samePort
+      && localNames.has(originHost.split(":")[0])
+      && localNames.has(reqHost.split(":")[0]);
+  }
+
+  async function handleRun(req, res) {
+    if (!originAllowed(req)) {
+      return sendJson(res, 403, { ok: false, error: "مبدأِ درخواست پذیرفته نشد." });
+    }
+    if (!tokenMatches(token, req.headers["x-pb-token"])) {
+      return sendJson(res, 401, { ok: false, error: "توکن نامعتبر است." });
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch (err) {
+      return sendJson(res, err.status || 400, { ok: false, error: err.message });
+    }
+
+    const command = typeof body.command === "string" ? body.command.trim() : "";
+    if (!command) return sendJson(res, 400, { ok: false, error: "فرمانی داده نشد." });
+
+    const stepId = "s" + randomBytes(8).toString("hex");
+    try {
+      term.run(command, stepId);
+    } catch (err) {
+      return sendJson(res, 400, { ok: false, error: err.message });
+    }
+    return sendJson(res, 200, { ok: true, stepId });
+  }
+
+  const server = createServer((req, res) => {
+    const url = new URL(req.url, `http://${host}:${port}`);
+
+    if (req.method === "POST" && url.pathname === "/api/run") return handleRun(req, res);
 
     if (req.method !== "GET") {
-      // قدمِ ۴ فقط-خواندنی است. هر چیزی جز GET، عمداً پذیرفته نمی‌شود.
-      return sendJson(res, 405, { ok: false, error: "این سرور فقط GET می‌پذیرد." });
+      return sendJson(res, 405, { ok: false, error: "متد پذیرفته نشد." });
     }
 
     if (url.pathname === "/") {
-      const html = readFileSync(join(PUBLIC_DIR, "index.html"), "utf8");
+      // توکن داخلِ همان صفحه تزریق می‌شود. صفحهٔ بیگانه نمی‌تواند بخواندش،
+      // چون Same-Origin Policy جلویش را می‌گیرد.
+      const html = readFileSync(join(PUBLIC_DIR, "index.html"), "utf8")
+        .replace("__PB_TOKEN__", token);
       res.writeHead(200, { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store" });
       return res.end(html);
     }
 
-    if (url.pathname === "/api/probe") return handleProbe(res, url);
+    if (VENDOR[url.pathname]) {
+      const file = VENDOR[url.pathname];
+      if (!existsSync(file)) return sendJson(res, 500, { ok: false, error: "فایلِ کتابخانه پیدا نشد." });
+      res.writeHead(200, { "Content-Type": MIME[extname(file)] || "application/octet-stream" });
+      return res.end(readFileSync(file));
+    }
+
+    if (url.pathname === "/api/probe") {
+      const target = (url.searchParams.get("path") || "").trim();
+      if (!target) return sendJson(res, 400, { ok: false, error: "مسیرِ پوشه داده نشده." });
+      try {
+        return sendJson(res, 200, { ok: true, probe: probeProject(target) });
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, error: `خطا در بررسی: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === "/api/terminal-info") {
+      return sendJson(res, 200, { ok: true, shell: term.shell(), alive: term.isAlive() });
+    }
 
     return sendJson(res, 404, { ok: false, error: "مسیر پیدا نشد." });
   });
+
+  // ---- پُلِ WebSocket بینِ ترمینالِ واقعی و مرورگر ----
+  // noServer است تا خودمان قبلِ ارتقا، توکن و مبدأ را بررسی کنیم.
+  const wss = new WebSocketServer({ noServer: true });
+  const clients = new Set();
+
+  server.on("upgrade", (req, socket, head) => {
+    const url = new URL(req.url, `http://${host}:${port}`);
+    const bad = (reason) => {
+      socket.write(`HTTP/1.1 401 Unauthorized\r\n\r\n${reason}`);
+      socket.destroy();
+    };
+    if (url.pathname !== "/pty") return bad("مسیر نامعتبر");
+    if (!originAllowed(req)) return bad("مبدأ پذیرفته نشد");
+    if (!tokenMatches(token, url.searchParams.get("token"))) return bad("توکن نامعتبر");
+
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      clients.add(ws);
+      term.ensure();
+
+      ws.on("message", (raw) => {
+        let msg;
+        try { msg = JSON.parse(raw.toString()); } catch { return; }
+        if (msg.type === "input" && typeof msg.data === "string") term.write(msg.data);
+        else if (msg.type === "resize") term.resize(msg.cols, msg.rows);
+      });
+      ws.on("close", () => clients.delete(ws));
+      ws.on("error", () => clients.delete(ws));
+    });
+  });
+
+  const broadcast = (msg) => {
+    const payload = JSON.stringify(msg);
+    for (const ws of clients) if (ws.readyState === ws.OPEN) ws.send(payload);
+  };
+
+  const unsubData = term.onData((data) => broadcast({ type: "data", data }));
+  const unsubStep = term.onStepResult((r) => broadcast({ type: "stepResult", ...r }));
+
+  const origClose = server.close.bind(server);
+  server.close = (cb) => {
+    unsubData();
+    unsubStep();
+    for (const ws of clients) { try { ws.close(); } catch { /* بسته بود */ } }
+    clients.clear();
+    wss.close();
+    if (!terminal) term.dispose(); // اگر ترمینال را خودمان ساختیم، خودمان هم می‌بندیم
+    return origClose(cb);
+  };
+
+  return { server, token, terminal: term };
 }
 
-/** @returns {Promise<{ server: import("node:http").Server, port: number, url: string }>} */
-export function startServer({ port = DEFAULT_PORT, host = "127.0.0.1" } = {}) {
-  const server = createApp();
+/** @returns {Promise<{ server: import("node:http").Server, port: number, url: string, token: string }>} */
+export function startServer({ port = DEFAULT_PORT, host = "127.0.0.1", terminal } = {}) {
+  const { server, token, terminal: term } = createApp({ host, port, terminal });
   return new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen(port, host, () => {
       const actual = server.address().port;
-      resolve({ server, port: actual, url: `http://${host}:${actual}` });
+      resolve({ server, port: actual, url: `http://${host}:${actual}`, token, terminal: term });
     });
   });
 }

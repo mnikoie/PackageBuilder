@@ -184,9 +184,10 @@ function runProbe(targetPath) {
 /** سرورِ رابطِ کاربری. فقط-خواندنی و فقط روی 127.0.0.1. */
 async function runServe(port) {
   try {
-    const { url } = await startServer({ port: port || DEFAULT_PORT });
+    const { url, terminal } = await startServer({ port: port || DEFAULT_PORT });
     console.log(`\n✓ رابطِ کاربری بالا آمد: ${url}`);
-    console.log(`  فقط-خواندنی — هیچ چیزی را عوض نمی‌کند.`);
+    console.log(`  ترمینال: ${terminal.shell() || "در حالِ تشخیص…"}`);
+    console.log(`  فقط روی 127.0.0.1 و با توکنِ همان صفحه — از بیرون در دسترس نیست.`);
     console.log(`  برای بستن: Ctrl+C\n`);
   } catch (err) {
     if (err.code === "EADDRINUSE") {
