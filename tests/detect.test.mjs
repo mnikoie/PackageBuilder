@@ -388,6 +388,21 @@ describe("probeProject", () => {
     assert.deepEqual(res.mismatches, []);
   });
 
+  test("rootDeps با رانتایمِ Node تناقض ندارد", () => {
+    // یک‌بار UI وضعیتِ این ردیف را از **متنِ** مدرکِ nodeRuntime حدس زد و صفحه
+    // دو حرفِ متناقض زد: «هر دو موجودند» بالای «node_modules نیست».
+    // پس این ردیف داده‌ی مستقلِ خودش را دارد و همخوانی‌اش تست می‌شود.
+    const withDeps = fixture("root-deps-yes", { "package.json": "{}", "node_modules/x/i.js": "" });
+    const a = probeProject(withDeps, { run: dockerMissing });
+    assert.equal(a.rootDeps.state, PRESENT);
+    assert.equal(a.nodeRuntime.state, PRESENT, "هر دو باید یک چیز بگویند");
+
+    const noDeps = fixture("root-deps-no", { "package.json": "{}" });
+    const b = probeProject(noDeps, { run: dockerMissing });
+    assert.equal(b.rootDeps.state, ABSENT);
+    assert.equal(b.nodeRuntime.state, ABSENT, "هر دو باید یک چیز بگویند");
+  });
+
   test("project.config.jsonِ خراب باعثِ کرش نمی‌شود", () => {
     const dir = fixture("bad-config", { "project.config.json": "{ این JSON نیست" });
     const res = probeProject(dir, { run: dockerMissing });

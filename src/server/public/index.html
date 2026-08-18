@@ -81,6 +81,23 @@
   .chip.no    { background: var(--no-bg);    color: var(--no); }
   .chip.maybe { background: var(--maybe-bg); color: var(--maybe); }
 
+  /* سلسله‌مراتبِ appها باید دیده شود — قبلاً ردیف‌های فرزند شبیهِ هم‌رده بودند. */
+  .row.app-head { margin-top: 6px; font-weight: 700; }
+  .row.app-head .label { font-size: .92rem; }
+  .row.child { padding-inline-start: 34px; position: relative; }
+  .row.child::before {
+    content: ""; position: absolute; inset-inline-start: 18px; top: 0; bottom: 0;
+    border-inline-start: 2px solid var(--border);
+  }
+  .row.child:last-child::before { bottom: 50%; }
+  .row.child.na { color: var(--muted); font-size: .78rem; font-style: italic; }
+
+  /* برچسبِ جنسِ app: خاکستری، تا با چیپ‌های وضعیت اشتباه نشود. */
+  .kind {
+    flex: 0 0 auto; font-size: .68rem; padding: 2px 8px; border-radius: 20px;
+    background: #2a2f37; color: var(--muted); font-family: Consolas, monospace;
+  }
+
   .empty { color: var(--muted); padding: 10px 14px; font-style: italic; }
   .err { border-color: var(--no); }
   .err > h2 { color: var(--no); border-color: var(--no); }
@@ -167,27 +184,56 @@
 
     out.append(el("div", "sub mono", probe.path));
 
-    out.append(card("پایه", [
+    // «وابستگی‌های ریشه» ردیفِ جدا شد: قبلاً فقط داخلِ متنِ مدرکِ «رانتایمِ Node»
+    // پنهان بود و کاربر نمی‌فهمید node_modulesِ ریشه دیده شده یا نه.
+    // وضعیتش از دادهٔ سرور می‌آید، نه از تفسیرِ متنِ مدرک.
+    out.append(card("پایه — خودِ ریشهٔ پروژه", [
       row("ساختهٔ PackageBuilder", probe.scaffolded),
       row("مخزنِ گیت", probe.git),
       row("رانتایمِ Node", probe.nodeRuntime),
+      row("وابستگی‌های ریشه", probe.rootDeps),
       row("مدیرِ پکیج", probe.packageManager),
       row("ابزارِ مونوریپو", probe.monorepo),
     ]));
 
     // ---- appها
+    //
+    // این بخش قبلاً گیج‌کننده بود و کاربر درست ایراد گرفت:
+    //  • ردیف‌های زیرِ هر app، شبیهِ هم‌ردهٔ خودش دیده می‌شدند نه زیرمجموعه‌اش
+    //  • برچسبِ جنس (node / node+python) رنگِ سبزِ وضعیت داشت، پس «هست» خوانده می‌شد
+    //  • «نبودنِ ردیفِ پایتون» یعنی «به این app مربوط نیست»، ولی نامرئی بود
     const appRows = probe.apps.length
       ? probe.apps.flatMap((app) => {
           const rows = [];
-          const head = el("div", "row");
-          head.append(el("span", "chip ok", app.kind), el("span", "label", app.name));
+
+          const head = el("div", "row app-head");
+          head.append(
+            el("span", "kind", app.kind),           // خاکستری، نه سبز — این وضعیت نیست
+            el("span", "label", `apps/${app.name}`),
+          );
           rows.push(head);
-          if (app.nodeDeps) rows.push(row("‏  node_modules", app.nodeDeps));
-          if (app.pythonEnv) rows.push(row("‏  محیطِ پایتون", app.pythonEnv));
+
+          const child = (label, res, hint) => {
+            const r = row(label, res);
+            r.classList.add("child");
+            if (hint) r.querySelector(".label").title = hint;
+            return r;
+          };
+
+          if (app.nodeDeps) rows.push(child("وابستگی‌های Node", app.nodeDeps));
+          if (app.pythonEnv) rows.push(child("محیطِ پایتون (.venv)", app.pythonEnv));
+
+          // «مربوط نیست» را صریح می‌گوییم، تا سکوت تفسیر نشود.
+          if (!app.pythonEnv && app.kinds.includes("node")) {
+            rows.push(el("div", "row child na", "محیطِ پایتون — به این app مربوط نیست (پایتونی نیست)"));
+          }
+          if (!app.nodeDeps && app.kinds.includes("python")) {
+            rows.push(el("div", "row child na", "وابستگی‌های Node — به این app مربوط نیست"));
+          }
           return rows;
         })
       : [el("div", "empty", "پوشهٔ apps وجود ندارد یا خالی است.")];
-    out.append(card("appها", appRows));
+    out.append(card("appها — هر ردیفِ تودررفته، مالِ همان appِ بالای خودش است", appRows));
 
     // ---- Docker
     const d = probe.docker;

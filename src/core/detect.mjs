@@ -358,6 +358,9 @@ export function probeProject(projectPath, { run = realRunner } = {}) {
     declared,
     git: detectGitRepo(abs),
     nodeRuntime: detectNodeRuntime(abs),
+    // ردیفِ جدا، چون UI نباید وضعیت را از **متنِ** مدرک حدس بزند. (یک‌بار
+    // همین کار را کردم و صفحه دو حرفِ متناقض زد.)
+    rootDeps: detectNodeModules(abs, null),
     packageManager: detectPackageManager(abs),
     monorepo,
     apps: detectApps(abs),
