@@ -31,6 +31,14 @@
 // اینها «چسبِ» ما هستند، نه خروجیِ CLIِ رسمی: `pnpm add -Dw` بیرونِ یک
 // workspace خطا می‌دهد، پس ابزارِ مونوریپو باید اول خودِ workspace را بسازد.
 
+/** داخلِ data/ همه‌چیز دادهٔ کاربر است، جز خودِ این فایل. */
+const GITIGNORE_DATA = [
+  "# فایل‌هایِ دیتابیس دادهٔ تواند، نه کد. واردِ گیت نمی‌شوند.",
+  "*",
+  "!.gitignore",
+  "",
+].join("\n");
+
 const WORKSPACE_YAML = [
   "packages:",
   '  - "apps/*"',
@@ -260,7 +268,7 @@ export const TECHNOLOGIES = [
       steps: [
         // ابزارِ مونوریپو بدونِ workspace بی‌معناست، و «pnpm add -Dw» هم بیرونِ
         // workspace خطا می‌دهد. پس خودش هر دو فایل را می‌سازد.
-        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "writeFile", path: "turbo.json", content: TURBO_JSON },
         { kind: "pnpmAddDev", packages: ["turbo"] },
       ],
@@ -279,7 +287,7 @@ export const TECHNOLOGIES = [
     apply: {
       verified: true,
       steps: [
-        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "writeFile", path: "nx.json", content: NX_JSON },
         { kind: "pnpmAddDev", packages: ["nx"], allowBuild: ["nx"] },
       ],
@@ -300,7 +308,7 @@ export const TECHNOLOGIES = [
     apply: {
       verified: true,
       steps: [
-        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "mkdir", path: "apps" },
         { kind: "cli", command: "npx --yes create-react-router@latest apps/web --yes --no-install" },
         { kind: "cli", command: "pnpm install" },
@@ -321,7 +329,7 @@ export const TECHNOLOGIES = [
     apply: {
       verified: true,
       steps: [
-        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "mkdir", path: "apps" },
         { kind: "cli", command: "npx --yes create-next-app@latest apps/web --yes --skip-install" },
         { kind: "cli", command: "pnpm install" },
@@ -344,7 +352,7 @@ export const TECHNOLOGIES = [
     apply: {
       verified: true,
       steps: [
-        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "mkdir", path: "apps" },
         { kind: "cli", command: "npx --yes @nestjs/cli@latest new apps/api --skip-git --skip-install --package-manager pnpm" },
         { kind: "cli", command: "pnpm install" },
@@ -366,7 +374,7 @@ export const TECHNOLOGIES = [
       verified: true,
       steps: [
         // Express اسکافولدرِ رسمی ندارد، پس کمترین appِ ممکن را خودمان می‌سازیم.
-        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "writeFile", path: "apps/api/package.json", content: EXPRESS_APP.pkg },
         { kind: "writeFile", path: "apps/api/src/main.js", content: EXPRESS_APP.code },
         { kind: "cli", command: "pnpm --filter api add express" },
@@ -390,7 +398,7 @@ export const TECHNOLOGIES = [
       verified: true,
       steps: [
         // هیچ چیزی apps/worker را نمی‌ساخت، پس خودش می‌سازدش.
-        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "writeFile", path: "apps/worker/package.json", content: WORKER_APP.pkg },
         { kind: "writeFile", path: "apps/worker/src/main.js", content: WORKER_APP.code },
         { kind: "cli", command: "pnpm --filter worker add bullmq ioredis" },
@@ -446,6 +454,81 @@ export const TECHNOLOGIES = [
     meta: {
       pros: ["رایج‌ترین، میزبانیِ ارزان و فراوان", "ابزارهای مدیریتیِ زیاد"],
       cons: ["امکاناتِ پیشرفتهٔ کمتر از Postgres", "پشتیبانیِ JSON ضعیف‌تر"],
+    },
+  },
+
+  {
+    id: "mongodb",
+    category: "database",
+    label: "MongoDB",
+    detect: { kind: "dockerService", service: "mongodb" },
+    apply: {
+      verified: true,
+      steps: [
+        {
+          kind: "composeService", service: "mongodb", image: "mongo:8", ports: [{ container: 27017, host: 27017, env: "MONGO_PORT" }],
+          // بی این دو متغیر کانتینر بالا می‌آید ولی بی‌رمز — یعنی هر کسی روی
+          // شبکهٔ لوکال به همهٔ داده دسترسی دارد. الزامِ خودِ ایمیج نیست، الزامِ
+          // عقل است.
+          environment: { MONGO_INITDB_ROOT_USERNAME: "app", MONGO_INITDB_ROOT_PASSWORD: "change-me", MONGO_INITDB_DATABASE: "app" },
+          volume: "/data/db",
+        },
+        // authSource=admin لازم است: کاربرِ ریشه در دیتابیسِ admin ساخته می‌شود،
+        // نه در دیتابیسِ app. بی آن، ورود رد می‌شود.
+        { kind: "env", vars: { MONGO_URL: "mongodb://app:change-me@localhost:27017/app?authSource=admin" } },
+      ],
+    },
+    meta: {
+      pros: ["شکلِ داده از قبل تعریف‌شده لازم ندارد", "برای دادهٔ تودرتو و متغیر راحت", "مقیاسِ افقیِ آسان"],
+      cons: ["تراکنش و join مثلِ دیتابیسِ رابطه‌ای قوی نیست", "بی‌انضباطیِ شکلِ داده به‌مرور دردسر می‌شود"],
+    },
+  },
+  {
+    id: "mariadb",
+    category: "database",
+    label: "MariaDB",
+    detect: { kind: "dockerService", service: "mariadb" },
+    apply: {
+      verified: true,
+      steps: [
+        {
+          kind: "composeService", service: "mariadb", image: "mariadb:11", ports: [{ container: 3306, host: 3306, env: "MARIADB_PORT" }],
+          environment: { MARIADB_ROOT_PASSWORD: "change-me", MARIADB_DATABASE: "app", MARIADB_USER: "app", MARIADB_PASSWORD: "change-me" },
+          volume: "/var/lib/mysql",
+        },
+        { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@localhost:3306/app" } },
+      ],
+    },
+    meta: {
+      pros: ["شاخهٔ آزادِ MySQL، با همان ابزارها و همان دستورها", "کمی سریع‌تر از MySQL در بعضی کارها", "بی‌نگرانیِ مالکیتِ شرکتی"],
+      cons: ["در بعضی جزئیات از MySQL جدا شده و ۱۰۰٪ یکسان نیست", "میزبان‌های ابری کمتر مستقیم پشتیبانی‌اش می‌کنند"],
+    },
+  },
+  {
+    id: "sqlite",
+    category: "database",
+    label: "SQLite",
+    // تنها دیتابیسِ این فهرست که کانتینر نمی‌خواهد: یک فایل روی دیسک است.
+    // پس مدرکش هم Docker نیست، نصب‌بودنِ درایورش در پروژه است.
+    requires: ["pnpm"],
+    detect: { kind: "npmRoot", name: "better-sqlite3" },
+    apply: {
+      verified: true,
+      steps: [
+        // allowBuild لازم است: این پکیج باینریِ بومی دارد و pnpm ۱۰+ بی‌اجازه
+        // اسکریپتِ بیلد را اجرا نمی‌کند و نصب را شکست‌خورده اعلام می‌کند.
+        { kind: "pnpmAdd", packages: ["better-sqlite3"], allowBuild: ["better-sqlite3"] },
+        { kind: "mkdir", path: "data" },
+        // چسبِ لازم: فایلِ دیتابیس نباید واردِ گیت شود. بی این، هر بار که
+        // برنامه چیزی می‌نویسد درختِ گیت کثیف می‌شود و دکمهٔ برگشت — که عمداً روی
+        // درختِ کثیف امتناع می‌کند — برای همیشه قفل می‌ماند. در اجرای واقعی دیده شد.
+        { kind: "writeFile", path: "data/.gitignore", content: GITIGNORE_DATA },
+        { kind: "env", vars: { DATABASE_URL: "file:./data/app.db" } },
+      ],
+    },
+    meta: {
+      pros: ["هیچ سروری لازم ندارد — یک فایل است", "برای پروژهٔ کوچک و تستِ محلی سریع‌ترین راه", "پشتیبان‌گیری یعنی کپیِ یک فایل"],
+      cons: ["برای نوشتنِ همزمانِ چند کاربر ساخته نشده", "روی چند سرور اصلاً کار نمی‌کند"],
     },
   },
 
@@ -607,6 +690,14 @@ export const REMOVALS = {
   // (چون آن فایل از رویِ تصمیم‌ها از نو ساخته می‌شود).
   postgres: { steps: [{ kind: "composeDown", service: "postgres" }] },
   mysql: { steps: [{ kind: "composeDown", service: "mysql" }] },
+  mongodb: { steps: [{ kind: "composeDown", service: "mongodb" }] },
+  mariadb: { steps: [{ kind: "composeDown", service: "mariadb" }] },
+  // SQLite کانتینر ندارد؛ درایورش برداشته می‌شود. فایلِ data/app.db عمداً
+  // نمی‌ماند دستِ ابزار: دادهٔ کاربر است و پاک‌کردنش تصمیمِ او.
+  sqlite: {
+    steps: [{ kind: "cli", command: "pnpm remove better-sqlite3" }],
+    note: "فایلِ دیتابیس در data/ دست‌نخورده می‌ماند — دادهٔ توست، خودت تصمیم بگیر.",
+  },
   meilisearch: { steps: [{ kind: "composeDown", service: "meilisearch" }] },
   elasticsearch: { steps: [{ kind: "composeDown", service: "elasticsearch" }] },
   minio: { steps: [{ kind: "composeDown", service: "minio" }] },
@@ -627,7 +718,7 @@ export const manualRemovalTechnologies = () =>
 const DETECT_KINDS = new Set([
   "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "envVar", "all", "any",
 ]);
-const APPLY_KINDS = new Set(["cli", "env", "file", "composeService", "writeFile", "pnpmAddDev", "mkdir"]);
+const APPLY_KINDS = new Set(["cli", "env", "file", "composeService", "writeFile", "pnpmWorkspace", "pnpmAddDev", "pnpmAdd", "mkdir"]);
 const REMOVE_KINDS = new Set(["cli", "deleteFile", "composeDown"]);
 
 /**

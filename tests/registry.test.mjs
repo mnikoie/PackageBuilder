@@ -112,10 +112,11 @@ describe("سلامتِ رجیستری", () => {
     // صفر تا کارکردن اجرا و با مدرک دیده شود. اگر کسی بی‌آزمایش علامتش را
     // عوض کند، همین تست قرمز می‌شود و مجبور است این فهرست را هم دست بزند.
     const REALLY_TESTED = [
-      // هر ۱۹ مورد واقعاً از پوشهٔ خالی تا مدرکِ کارکردن اجرا شد.
+      // هر ۲۲ مورد واقعاً از پوشهٔ خالی تا مدرکِ کارکردن اجرا شد.
       "node", "python", "pnpm", "npm", "turborepo", "nx",
       "react-router-v7", "nextjs", "nestjs", "express", "bullmq",
-      "postgres", "mysql", "meilisearch", "elasticsearch", "minio", "s3",
+      "postgres", "mysql", "mongodb", "mariadb", "sqlite",
+      "meilisearch", "elasticsearch", "minio", "s3",
       "playwright", "cypress",
     ];
     const verified = TECHNOLOGIES.filter((t) => t.apply.verified).map((t) => t.id);

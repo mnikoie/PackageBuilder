@@ -89,7 +89,7 @@
 │   │   ├── skeleton.mjs            (۶۹)  قالب‌ها + جای‌گیرها
 │   │   ├── scaffold.mjs            (۱۷۹) ساختِ پوشهٔ نو + git init
 │   │   ├── detect.mjs              (۳۷۰) تشخیصِ سه‌حالتی، فقط‌خواندنی
-│   │   ├── registry.mjs            (۷۵۱) ⭐ ۱۰ دسته، ۱۹ تکنولوژی — داده، نه کد
+│   │   ├── registry.mjs            (۷۵۱) ⭐ ۱۰ دسته، ۲۲ تکنولوژی — داده، نه کد
 │   │   ├── resolve.mjs             (۲۱۸) ارزیابیِ مدرک‌ها روی پروژهٔ واقعی
 │   │   ├── apply.mjs               (۸۸۹) ⭐ اعمال و برگشت
 │   │   ├── git.mjs                 (۱۳۵) کامیتِ هر تصمیم
@@ -205,12 +205,12 @@ npm run e2e                                       # ۷ تستِ Playwright
 | `frontendFramework` | React Router v7 (framework mode) / Next.js |
 | `backendFramework` | NestJS / Express |
 | `backgroundJobs` | BullMQ |
-| `database` | PostgreSQL / MySQL |
+| `database` | PostgreSQL / MySQL / MongoDB / MariaDB / SQLite |
 | `search` | Meilisearch / Elasticsearch |
 | `storage` | MinIO / S3 (ابری) |
 | `e2e` | Playwright / Cypress |
 
-**۱۰ دسته، ۱۹ تکنولوژی، هر ۱۹ تا `verified: true`.**
+**۱۰ دسته، ۲۲ تکنولوژی، هر ۲۲ تا `verified: true`.**
 
 دامنهٔ دورِ اول عمداً «در هر دسته دو گزینه» بود — یکی که می‌دانیم کار می‌کند و
 یک رقیب — برای اثباتِ عمومی‌بودنِ ماشین. رساندنش به سه-چهار گزینه فقط «یک
@@ -432,7 +432,7 @@ apply: { verified: true, steps: [{ kind: "cli", command: "npm init -y" }] },
 |---|---|
 | `scaffold.test.mjs` | پوشهٔ ناموجود/خالی/پُر، مسیری که فایل است، زبالهٔ سیستم‌عامل، `--dry-run`، slugِ نامعتبر، و اینکه هیچ فایلِ تحمیل‌کنندهٔ تکنولوژی ساخته نمی‌شود |
 | `detect.test.mjs` | سه‌حالتی، سرایتِ نامعلوم، `kinds` چندمقداری، Dockerِ خاموش (با تزریق) |
-| `registry.test.mjs` | اعتبارسنجیِ داده + ۳ تستِ **قرارداد** + نگهبانِ صداقتِ ۱۹ تکنولوژی |
+| `registry.test.mjs` | اعتبارسنجیِ داده + ۳ تستِ **قرارداد** + نگهبانِ صداقتِ ۲۲ تکنولوژی |
 | `sentinel.test.mjs` | تکه‌بندی (تا حرف‌به‌حرف)، پسرفتِ پژواک، معیارِ کدِ خروج، `try/catch` |
 | `terminal.test.mjs` | موفقیت با stderr، شکستِ cmdlet، موفقیتِ cmdlet، مرگِ پوسته |
 | `server.test.mjs` | هر چهار لایهٔ امنیت |
