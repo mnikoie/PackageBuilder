@@ -23,9 +23,13 @@ PackageBuilder — ساختِ پروژهٔ نو با اسکلتِ مستقل ا�
     --no-git                 مخزنِ گیت راه نینداز
 
   مثال:
-    node src/cli.mjs new "D:\\- AIProject\\PRG2" --name "PRG2"
-    node src/cli.mjs new ./sandbox/test-app --dry-run
-    node src/cli.mjs probe "D:\\- AIProject\\25- TaminLibrary"
+    node src/cli.mjs new ./my-app --name "My App"
+    node src/cli.mjs new ./my-app --dry-run
+    node src/cli.mjs probe .
+    node src/cli.mjs probe ./my-app
+
+  مسیرها هم نسبی می‌شوند هم مطلق. این ابزار به هیچ پوشه یا پروژهٔ خاصی
+  وابسته نیست و از هر جایی روی هر مسیری کار می‌کند.
 `;
 
 function parseArgs(argv) {

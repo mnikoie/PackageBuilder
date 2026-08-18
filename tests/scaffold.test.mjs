@@ -23,8 +23,8 @@ const freshPath = (name) => join(sandbox, name);
 
 describe("slugify و اعتبارسنجی", () => {
   test("نامِ پوشه را به slugِ معتبر تبدیل می‌کند", () => {
-    assert.equal(slugify("PRG1"), "prg1");
-    assert.equal(slugify("26- PackageBuilder"), "26-packagebuilder");
+    assert.equal(slugify("Widget9"), "widget9");
+    assert.equal(slugify("26- Some Tool"), "26-some-tool");
     assert.equal(slugify("My  Cool__App!!"), "my-cool-app");
     assert.equal(slugify("--edge--"), "edge");
   });
