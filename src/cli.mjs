@@ -8,6 +8,7 @@
 
 import { scaffoldProject } from "./core/scaffold.mjs";
 import { probeProject, PRESENT, ABSENT, UNKNOWN } from "./core/detect.mjs";
+import { startServer, DEFAULT_PORT } from "./server/server.mjs";
 
 const USAGE = `
 PackageBuilder — ساختِ پروژهٔ نو با اسکلتِ مستقل از تکنولوژی
@@ -15,6 +16,7 @@ PackageBuilder — ساختِ پروژهٔ نو با اسکلتِ مستقل ا�
   استفاده:
     node src/cli.mjs new   <مسیرِ پوشه> [گزینه‌ها]   ساختِ پروژهٔ نو
     node src/cli.mjs probe <مسیرِ پوشه>              گزارشِ وضعیتِ واقعی
+    node src/cli.mjs serve [--port <شماره>]          همان گزارش، در مرورگر
 
   گزینه‌های new:
     --name "<نامِ نمایشی>"   پیش‌فرض: نامِ خودِ پوشه
@@ -34,7 +36,7 @@ PackageBuilder — ساختِ پروژهٔ نو با اسکلتِ مستقل ا�
 
 function parseArgs(argv) {
   const [command, ...rest] = argv;
-  const opts = { command, targetPath: "", name: "", slug: "", dryRun: false, initGit: true };
+  const opts = { command, targetPath: "", name: "", slug: "", dryRun: false, initGit: true, port: 0 };
 
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i];
@@ -42,6 +44,12 @@ function parseArgs(argv) {
     else if (arg === "--no-git") opts.initGit = false;
     else if (arg === "--name") opts.name = rest[++i] ?? "";
     else if (arg === "--slug") opts.slug = rest[++i] ?? "";
+    else if (arg === "--port") {
+      const raw = rest[++i] ?? "";
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1 || n > 65535) return { error: `پورتِ نامعتبر: ${raw}` };
+      opts.port = n;
+    }
     else if (arg.startsWith("--")) return { error: `گزینهٔ ناشناخته: ${arg}` };
     else if (!opts.targetPath) opts.targetPath = arg;
     else return { error: `مسیرِ اضافی: ${arg}` };
@@ -61,11 +69,14 @@ function main() {
     console.log(USAGE);
     process.exit(0);
   }
-  if (opts.command !== "new" && opts.command !== "probe") {
+  if (!["new", "probe", "serve"].includes(opts.command)) {
     console.error(`\n✗ دستورِ ناشناخته: ${opts.command}`);
     console.error(USAGE);
     process.exit(2);
   }
+
+  if (opts.command === "serve") return runServe(opts.port);
+
   if (!opts.targetPath) {
     console.error("\n✗ مسیرِ پوشه را بده.");
     console.error(USAGE);
@@ -168,6 +179,23 @@ function runProbe(targetPath) {
   }
 
   console.log("");
+}
+
+/** سرورِ رابطِ کاربری. فقط-خواندنی و فقط روی 127.0.0.1. */
+async function runServe(port) {
+  try {
+    const { url } = await startServer({ port: port || DEFAULT_PORT });
+    console.log(`\n✓ رابطِ کاربری بالا آمد: ${url}`);
+    console.log(`  فقط-خواندنی — هیچ چیزی را عوض نمی‌کند.`);
+    console.log(`  برای بستن: Ctrl+C\n`);
+  } catch (err) {
+    if (err.code === "EADDRINUSE") {
+      console.error(`\n✗ پورت ${port || DEFAULT_PORT} مشغول است. با --port یک شمارهٔ دیگر بده.\n`);
+    } else {
+      console.error(`\n✗ سرور بالا نیامد: ${err.message}\n`);
+    }
+    process.exit(1);
+  }
 }
 
 main();

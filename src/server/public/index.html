@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PackageBuilder — وضعیتِ واقعی</title>
+<style>
+  :root {
+    --bg: #0d1117; --panel: #161b22; --panel2: #1c2128; --border: #30363d;
+    --text: #e6edf3; --muted: #8b949e;
+    --ok: #3fb950; --ok-bg: #0f2f18;
+    --no: #f85149; --no-bg: #3a1214;
+    --maybe: #d29922; --maybe-bg: #3a2c0c;
+    --accent: #2f81f7;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; }
+  body {
+    background: var(--bg); color: var(--text);
+    font-family: Vazirmatn, Tahoma, sans-serif; font-size: 14px; line-height: 1.7;
+    padding: 20px; max-width: 1000px; margin: 0 auto;
+  }
+  button, input { font-family: inherit; font-size: inherit; }
+
+  h1 { font-size: 1.15rem; margin: 0 0 4px; }
+  .sub { color: var(--muted); font-size: .82rem; margin-bottom: 18px; }
+
+  .bar { display: flex; gap: 8px; margin-bottom: 6px; }
+  .bar input {
+    flex: 1; padding: 9px 12px; direction: ltr; text-align: left;
+    background: var(--panel); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+  }
+  .bar input:focus { outline: none; border-color: var(--accent); }
+  .bar button {
+    padding: 9px 18px; cursor: pointer; font-weight: 600;
+    background: var(--accent); color: #fff; border: none; border-radius: 8px;
+  }
+  .bar button:hover { filter: brightness(1.1); }
+
+  .legend { display: flex; gap: 16px; flex-wrap: wrap; color: var(--muted); font-size: .78rem; margin-bottom: 18px; }
+  .legend b { font-weight: 700; }
+
+  .card { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); margin-bottom: 14px; overflow: hidden; }
+  .card > h2 { font-size: .85rem; margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--muted); font-weight: 700; }
+  .card > .body { padding: 6px 0; }
+
+  .row { display: flex; align-items: baseline; gap: 10px; padding: 7px 14px; }
+  .row:nth-child(even) { background: var(--panel2); }
+  .row .label { min-width: 160px; font-weight: 600; }
+  .row .why { color: var(--muted); font-size: .8rem; flex: 1; direction: ltr; text-align: right; unicode-bidi: plaintext; }
+
+  .chip { flex: 0 0 auto; font-size: .72rem; font-weight: 700; padding: 2px 9px; border-radius: 20px; white-space: nowrap; }
+  .chip.ok    { background: var(--ok-bg);    color: var(--ok); }
+  .chip.no    { background: var(--no-bg);    color: var(--no); }
+  .chip.maybe { background: var(--maybe-bg); color: var(--maybe); }
+
+  .empty { color: var(--muted); padding: 10px 14px; font-style: italic; }
+  .err { border-color: var(--no); }
+  .err > h2 { color: var(--no); border-color: var(--no); }
+  .warn-line { color: var(--maybe); font-size: .8rem; padding: 4px 14px 10px; }
+  .note { color: var(--muted); font-size: .78rem; padding: 4px 14px 10px; }
+  .mono { font-family: Consolas, monospace; direction: ltr; unicode-bidi: plaintext; }
+  .ro { margin-top: 22px; color: var(--muted); font-size: .76rem; border-top: 1px solid var(--border); padding-top: 12px; }
+</style>
+</head>
+<body>
+
+<h1>وضعیتِ واقعیِ پروژه</h1>
+<div class="sub">این صفحه فقط می‌خواند. هیچ دکمه‌ای اینجا چیزی را عوض نمی‌کند.</div>
+
+<div class="bar">
+  <input id="path" type="text" placeholder="مسیرِ پوشهٔ پروژه — مثلاً ./my-app یا یک مسیرِ کامل" spellcheck="false" />
+  <button id="go">بررسی</button>
+</div>
+<div class="legend">
+  <span><span class="chip ok">✓ هست</span> <b>مدرک دیدیم که هست</b></span>
+  <span><span class="chip no">✗ نیست</span> <b>مدرک دیدیم که نیست</b></span>
+  <span><span class="chip maybe">؟ نامعلوم</span> <b>نتوانستیم بپرسیم</b></span>
+</div>
+
+<div id="out"></div>
+
+<div class="ro">
+  «نامعلوم» با «نیست» یکی نیست. اگر Docker بالا نباشد، وضعیتِ سرویس‌ها
+  <em>نامعلوم</em> است — نه «نصب نیست». نسخهٔ قبلیِ این ابزار همین دو را قاطی
+  می‌کرد و چیزهای نصب‌نشده را سبز نشان می‌داد.
+</div>
+
+<script>
+  const $ = (id) => document.getElementById(id);
+  const CHIP = { present: ["ok", "✓ هست"], absent: ["no", "✗ نیست"], unknown: ["maybe", "؟ نامعلوم"] };
+
+  const el = (tag, cls, text) => {
+    const n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  };
+
+  function row(label, res) {
+    const r = el("div", "row");
+    const [cls, caption] = CHIP[res.state] || ["maybe", "؟"];
+    r.append(el("span", "chip " + cls, caption), el("span", "label", label), el("span", "why", res.evidence || ""));
+    return r;
+  }
+
+  function card(title, children, cls = "") {
+    const c = el("div", "card " + cls);
+    c.append(el("h2", null, title));
+    const body = el("div", "body");
+    for (const child of children) body.append(child);
+    c.append(body);
+    return c;
+  }
+
+  function render(probe) {
+    const out = $("out");
+    out.textContent = "";
+
+    if (!probe.exists || !probe.isDirectory) {
+      out.append(card("مسیر", [el("div", "empty", probe.error + " — " + probe.path)], "err"));
+      return;
+    }
+
+    out.append(el("div", "sub mono", probe.path));
+
+    out.append(card("پایه", [
+      row("ساختهٔ PackageBuilder", probe.scaffolded),
+      row("مخزنِ گیت", probe.git),
+      row("رانتایمِ Node", probe.nodeRuntime),
+      row("مدیرِ پکیج", probe.packageManager),
+      row("ابزارِ مونوریپو", probe.monorepo),
+    ]));
+
+    // ---- appها
+    const appRows = probe.apps.length
+      ? probe.apps.flatMap((app) => {
+          const rows = [];
+          const head = el("div", "row");
+          head.append(el("span", "chip ok", app.kind), el("span", "label", app.name));
+          rows.push(head);
+          if (app.nodeDeps) rows.push(row("‏  node_modules", app.nodeDeps));
+          if (app.pythonEnv) rows.push(row("‏  محیطِ پایتون", app.pythonEnv));
+          return rows;
+        })
+      : [el("div", "empty", "پوشهٔ apps وجود ندارد یا خالی است.")];
+    out.append(card("appها", appRows));
+
+    // ---- Docker
+    const d = probe.docker;
+    const dockerChildren = [];
+    if (!d.file) {
+      dockerChildren.push(el("div", "empty", "فایلِ compose پیدا نشد، پس Docker پرسیده نشد."));
+    } else {
+      const info = el("div", "row");
+      info.append(el("span", "label", "فایلِ compose"), el("span", "why mono", d.file));
+      dockerChildren.push(info);
+
+      const nameRow = el("div", "row");
+      nameRow.append(el("span", "label", "نامِ پروژهٔ Docker"), el("span", "why mono", d.projectName || "(تعریف نشده)"));
+      dockerChildren.push(nameRow);
+
+      dockerChildren.push(el("div", d.projectName ? "note" : "warn-line",
+        d.projectName
+          ? "دامنه بر اساسِ همین نام است، نه مسیرِ پوشه. دو کپی با نامِ یکسان، وضعیتِ هم را نشان می‌دهند."
+          : "⚠ بدونِ name، دامنه از نامِ پوشه می‌آید و کپی‌های پروژه به هم قِلق می‌دهند."));
+
+      const services = Object.entries(d.services);
+      if (services.length === 0) dockerChildren.push(el("div", "empty", "سرویسی در فایلِ compose تعریف نشده."));
+      for (const [name, res] of services) dockerChildren.push(row(name, res));
+    }
+    out.append(card("Docker", dockerChildren));
+
+    // ---- تصمیم‌های اعلام‌شده
+    const stack = probe.declared && probe.declared.stack;
+    const chosen = stack ? Object.entries(stack).filter(([, v]) => v !== null) : [];
+    const declChildren = [];
+    if (!probe.declared) {
+      declChildren.push(el("div", "empty", "project.config.json وجود ندارد."));
+    } else if (probe.declared._parseError) {
+      declChildren.push(el("div", "empty", "project.config.json خوانده نشد: " + probe.declared._parseError));
+    } else if (chosen.length === 0) {
+      declChildren.push(el("div", "empty", "هنوز هیچ تکنولوژی‌ای انتخاب نشده."));
+    } else {
+      for (const [k, v] of chosen) {
+        const r = el("div", "row");
+        r.append(el("span", "label mono", k), el("span", "why", String(v)));
+        declChildren.push(r);
+      }
+    }
+    declChildren.push(el("div", "note", "این‌ها «قصد»اند، نه «واقعیت» — فقط می‌گویند چه چیزی انتخاب شده."));
+    out.append(card("تصمیم‌های اعلام‌شده", declChildren));
+
+    // ---- ناسازگاری
+    if (probe.mismatches.length) {
+      const rows = probe.mismatches.map((m) => {
+        const r = el("div", "row");
+        const cls = m.severity === "conflict" ? "no" : "maybe";
+        r.append(
+          el("span", "chip " + cls, m.severity === "conflict" ? "✗ نمی‌خواند" : "؟ نامعلوم"),
+          el("span", "label mono", m.field),
+          el("span", "why", `اعلام «${m.declared}» — واقعیت: ${m.reality}`),
+        );
+        return r;
+      });
+      out.append(card("اعلام با واقعیت نمی‌خواند", rows, "err"));
+    }
+  }
+
+  async function load() {
+    const path = $("path").value.trim();
+    const out = $("out");
+    if (!path) { out.textContent = ""; out.append(el("div", "empty", "مسیرِ یک پوشه را بده.")); return; }
+
+    out.textContent = "";
+    out.append(el("div", "empty", "در حالِ بررسی…"));
+    try {
+      const r = await fetch("/api/probe?path=" + encodeURIComponent(path));
+      const data = await r.json();
+      if (!data.ok) { out.textContent = ""; out.append(card("خطا", [el("div", "empty", data.error)], "err")); return; }
+      render(data.probe);
+    } catch (err) {
+      out.textContent = "";
+      out.append(card("خطا", [el("div", "empty", "درخواست به سرور نرسید: " + err.message)], "err"));
+    }
+  }
+
+  $("go").addEventListener("click", load);
+  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+
+  let timer = null;
+  $("path").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 500); });
+
+  // مسیر در آدرسِ صفحه هم قابلِ دادن است: /?path=...
+  const fromUrl = new URLSearchParams(location.search).get("path");
+  if (fromUrl) { $("path").value = fromUrl; load(); }
+</script>
+</body>
+</html>
