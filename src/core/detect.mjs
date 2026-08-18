@@ -196,6 +196,21 @@ export function readComposeDeclaration(projectPath) {
 }
 
 /**
+ * آرگومان‌های استانداردِ فراخوانیِ docker compose.
+ *
+ * `--env-file` حیاتی است: با `-f <path>`، خودِ Docker فایلِ `.env` را از پوشهٔ
+ * **فایلِ compose** می‌خواند (یعنی `deployment/`)، نه ریشهٔ پروژه. بدونِ این،
+ * متغیرهایی مثلِ `${POSTGRES_PORT}` به پیش‌فرضشان برمی‌گشتند و سرویس روی پورتِ
+ * اشتباه بالا می‌آمد — یا اصلاً بالا نمی‌آمد. (در آزمایشِ زنده گرفته شد.)
+ */
+export function composeArgs(projectPath, composePath, rest) {
+  const envFile = join(projectPath, ".env");
+  return existsSync(envFile)
+    ? ["compose", "--env-file", envFile, "-f", composePath, ...rest]
+    : ["compose", "-f", composePath, ...rest];
+}
+
+/**
  * وضعیتِ واقعیِ سرویس‌های Docker.
  *
  * نکتهٔ مهمِ دامنه: Docker کانتینرها را با «نامِ پروژه» گروه می‌کند (فیلدِ
@@ -226,9 +241,9 @@ export function detectDockerServices(projectPath, run = realRunner) {
   }
 
   const composePath = join(projectPath, declaration.file);
-  const res = run("docker", [
-    "compose", "-f", composePath, "ps", "--services", "--filter", "status=running",
-  ]);
+  const res = run("docker", composeArgs(projectPath, composePath, [
+    "ps", "--services", "--filter", "status=running",
+  ]));
 
   const services = {};
   if (res.error || res.status !== 0) {

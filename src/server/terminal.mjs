@@ -29,8 +29,23 @@ export function detectShell() {
  * @param {string} [opts.shell]      اگر ندهی، خودش پیدا می‌کند
  * @param {object} [opts.pty]        برای تست قابلِ تزریق است
  * @param {number} [opts.stepTimeoutMs] سقفِ انتظار برای پایانِ یک مرحله
+ * @param {boolean} [opts.useConpty] پایین را بخوان
  */
-export function createTerminal({ cwd = process.cwd(), shell, pty, stepTimeoutMs = 10 * 60 * 1000 } = {}) {
+export function createTerminal({
+  cwd = process.cwd(),
+  shell,
+  pty,
+  stepTimeoutMs = 10 * 60 * 1000,
+  // ---- چرا winpty و نه conpty ----
+  // conpty backendِ مدرن‌ترِ ویندوز است، ولی روی این سیستم موقعِ بستنِ ترمینال
+  // یک کمکی‌پروسه (conpty_console_list_agent) اجرا می‌کند که با
+  // «Error: AttachConsole failed» می‌ترکد و خطای ترسناکِ بی‌ربط چاپ می‌شود.
+  //
+  // اندازه‌گیری شد: با winpty آن خطا نیست و رنگ‌های ANSI هم کامل می‌آیند.
+  // پس پیش‌فرض winpty است. اگر روزی دقتِ بیشترِ conpty لازم شد (مثلاً برنامه‌های
+  // تمام‌صفحه‌ای)، همین گزینه را true کن — ولی آن خطا برمی‌گردد.
+  useConpty = false,
+} = {}) {
   const dataSubs = new Set();
   const stepSubs = new Set();
   const exitSubs = new Set();
@@ -84,6 +99,7 @@ export function createTerminal({ cwd = process.cwd(), shell, pty, stepTimeoutMs 
       rows: 30,
       cwd,
       env: process.env,
+      useConpty,
     });
 
     term.onData((chunk) => {
@@ -109,7 +125,8 @@ export function createTerminal({ cwd = process.cwd(), shell, pty, stepTimeoutMs 
     return term;
   }
 
-  return {
+  // به خودش ارجاع می‌دهیم تا runAndWait بتواند run و onStepResult را صدا بزند.
+  const api = {
     ensure,
     isAlive: () => term !== null,
     shell: () => shellPath,
@@ -127,6 +144,31 @@ export function createTerminal({ cwd = process.cwd(), shell, pty, stepTimeoutMs 
       if (!Number.isInteger(cols) || !Number.isInteger(rows)) return;
       if (cols < 2 || rows < 2 || cols > 1000 || rows > 1000) return;
       term.resize(cols, rows);
+    },
+
+    /**
+     * اجرای فرمان و **انتظار** تا پایانش.
+     *
+     * موتورِ اعمال (قدمِ ۷) به این نیاز دارد: باید بداند فرمانِ قبلی تمام شد و
+     * موفق بود، قبل از رفتن به فرمانِ بعدی.
+     *
+     * @returns {Promise<{ ok: boolean, id: string, reason?: string }>}
+     */
+    runAndWait(command, stepId) {
+      const id = stepId || "w" + Math.random().toString(36).slice(2, 12);
+      return new Promise((resolve) => {
+        const off = api.onStepResult((r) => {
+          if (r.id !== id) return;
+          off();
+          resolve(r);
+        });
+        try {
+          api.run(command, id);
+        } catch (err) {
+          off();
+          resolve({ ok: false, id, reason: err.message });
+        }
+      });
     },
 
     /**
@@ -174,4 +216,6 @@ export function createTerminal({ cwd = process.cwd(), shell, pty, stepTimeoutMs 
       }
     },
   };
+
+  return api;
 }

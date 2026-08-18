@@ -145,7 +145,12 @@ describe("امنیتِ اجرای فرمان", () => {
 
   test("با توکنِ غلط، اجرا نمی‌شود", async () => {
     const before = terminal.calls.length;
-    for (const bad of ["", "x", "0".repeat(48), token.slice(0, -1) + "0"]) {
+    // آخری «توکنِ درست با یک حرفِ عوض‌شده» است. حرفِ جانشین باید قطعاً متفاوت
+    // باشد، وگرنه تست لرزان می‌شود: اگر حرفِ آخر تصادفاً همان بود، توکن معتبر
+    // می‌ماند و تست بی‌دلیل شکست می‌خورد.
+    const lastChar = token.slice(-1);
+    const nearMiss = token.slice(0, -1) + (lastChar === "0" ? "1" : "0");
+    for (const bad of ["", "x", "0".repeat(48), nearMiss]) {
       const res = await runReq({ command: "Write-Host hi" }, { "x-pb-token": bad });
       assert.equal(res.status, 401, `توکنِ «${bad.slice(0, 8)}…» نباید پذیرفته شود`);
     }

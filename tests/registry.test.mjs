@@ -107,10 +107,14 @@ describe("سلامتِ رجیستری", () => {
     }
   });
 
-  test("همهٔ فرمان‌های نصب فعلاً «تأییدنشده» علامت خورده‌اند", () => {
-    // صداقت: این فرمان‌ها نوشته شده‌اند ولی هنوز واقعاً اجرا نشده‌اند.
-    // قدمِ ۷ باید هر کدام را اجرا کند و بعد علامتش را عوض کند.
-    assert.equal(unverifiedTechnologies().length, TECHNOLOGIES.length);
+  test("«تأییدشده» فقط به آنهایی داده شده که واقعاً اجرا شدند", () => {
+    // نگهبانِ صداقت: این فهرست فقط وقتی رشد می‌کند که یک تکنولوژی واقعاً از
+    // صفر تا کارکردن اجرا و با مدرک دیده شود. اگر کسی بی‌آزمایش علامتش را
+    // عوض کند، همین تست قرمز می‌شود و مجبور است این فهرست را هم دست بزند.
+    const REALLY_TESTED = ["postgres", "meilisearch"];
+    const verified = TECHNOLOGIES.filter((t) => t.apply.verified).map((t) => t.id);
+    assert.deepEqual(verified.sort(), [...REALLY_TESTED].sort());
+    assert.equal(unverifiedTechnologies().length, TECHNOLOGIES.length - REALLY_TESTED.length);
   });
 
   test("کمکی‌های خواندن درست کار می‌کنند", () => {
@@ -376,7 +380,10 @@ describe("resolveRegistry", () => {
 
   test("فهرستِ تأییدنشده‌ها برگردانده می‌شود تا UI بتواند هشدار بدهد", () => {
     const out = resolveRegistry(fixture("r-unverified"), { probe: dockerProbe([]) });
-    assert.equal(out.unverified.length, TECHNOLOGIES.length);
+    const expected = TECHNOLOGIES.filter((t) => !t.apply.verified).map((t) => t.id);
+    assert.deepEqual(out.unverified.sort(), expected.sort());
+    assert.ok(out.unverified.length > 0, "هنوز موردِ آزمایش‌نشده هست");
+    assert.ok(!out.unverified.includes("postgres"), "postgres واقعاً اجرا شده");
   });
 });
 

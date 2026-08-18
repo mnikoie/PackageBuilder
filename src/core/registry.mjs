@@ -13,11 +13,23 @@
  * ۲. `apply`  — چطور نصبش کنیم: CLIِ رسمیِ خودش + لایهٔ چسبِ ما (تصمیمِ ۰۰۰۳).
  * ۳. `meta`   — آنچه کاربر برای انتخاب لازم دارد: مزیت و عیب.
  *
- * ---- هشدارِ صداقت ----
- * فرمان‌های `apply` اینجا **ثبت** شده‌اند ولی هنوز **اجرا و تأیید نشده‌اند**؛
- * همه `verified: false` دارند. قدمِ ۷ باید هر کدام را واقعاً اجرا کند و بعد
- * علامتش را عوض کند. تا آن موقع UI باید صریح بگوید «آزمایش‌نشده» — نه اینکه
- * فرمانی که فقط قابل‌قبول به نظر می‌رسد را قطعی جا بزند.
+ * ---- `verified` یعنی چه ----
+ * `verified: true` فقط به تکنولوژی‌ای داده می‌شود که **واقعاً اجرا شده** و
+ * نتیجه‌اش با مدرک دیده شده — نه فرمانی که قابل‌قبول به نظر می‌رسد.
+ *
+ * تا این لحظه دو مورد این آزمون را داده‌اند: `postgres` و `meilisearch`. هر دو
+ * از یک پوشهٔ خالی تا سرویسِ بالا و پاسخ‌دهنده از میزبان اجرا شدند. همین
+ * آزمایش سه باگِ واقعی بیرون کشید که هیچ‌کدام را تستِ واحد نگرفته بود:
+ *
+ *   ۱. فایلِ composeِ تولیدی، volume را ارجاع می‌داد ولی تعریف نمی‌کرد →
+ *      «invalid compose project».
+ *   ۲. متغیرهای لازمِ خودِ ایمیج (مثلِ POSTGRES_PASSWORD) و مسیرِ دادهٔ هر
+ *      ایمیج و `command`ِ MinIO جا افتاده بود.
+ *   ۳. با `-f <path>`، خودِ Docker فایلِ `.env` را از پوشهٔ فایلِ compose
+ *      می‌خواند نه ریشهٔ پروژه → پورت‌ها اعمال نمی‌شدند.
+ *
+ * بقیه `verified: false` می‌مانند و UI صریح می‌گوید «نصبش آزمایش‌نشده». این
+ * علامت باید با اجرای واقعی به دست بیاید، نه با حدس.
  */
 
 /** دسته‌های تصمیم. ترتیب مهم است: از پایه به بالا. */
@@ -254,7 +266,7 @@ export const TECHNOLOGIES = [
       steps: [
         { kind: "cli", command: "pnpm --filter worker add bullmq ioredis" },
         { kind: "env", vars: { REDIS_URL: "redis://localhost:6379" } },
-        { kind: "composeService", service: "redis", image: "redis:7-alpine", ports: ["6379:6379"] },
+        { kind: "composeService", service: "redis", image: "redis:7-alpine", ports: [{ container: 6379, host: 6379, env: "REDIS_PORT" }], volume: "/data" },
       ],
     },
     meta: {
@@ -270,9 +282,14 @@ export const TECHNOLOGIES = [
     label: "PostgreSQL",
     detect: { kind: "dockerService", service: "postgres" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
-        { kind: "composeService", service: "postgres", image: "postgres:17-alpine", ports: ["5432:5432"] },
+        {
+          kind: "composeService", service: "postgres", image: "postgres:17-alpine", ports: [{ container: 5432, host: 5432, env: "POSTGRES_PORT" }],
+          // بدونِ POSTGRES_PASSWORD کانتینر بالا نمی‌آید — الزامِ خودِ ایمیج است.
+          environment: { POSTGRES_USER: "app", POSTGRES_PASSWORD: "change-me", POSTGRES_DB: "app" },
+          volume: "/var/lib/postgresql/data",
+        },
         { kind: "env", vars: { DATABASE_URL: "postgresql://app:change-me@localhost:5432/app" } },
       ],
     },
@@ -289,7 +306,11 @@ export const TECHNOLOGIES = [
     apply: {
       verified: false,
       steps: [
-        { kind: "composeService", service: "mysql", image: "mysql:8", ports: ["3306:3306"] },
+        {
+          kind: "composeService", service: "mysql", image: "mysql:8", ports: [{ container: 3306, host: 3306, env: "MYSQL_PORT" }],
+          environment: { MYSQL_ROOT_PASSWORD: "change-me", MYSQL_DATABASE: "app" },
+          volume: "/var/lib/mysql",
+        },
         { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@localhost:3306/app" } },
       ],
     },
@@ -306,9 +327,13 @@ export const TECHNOLOGIES = [
     label: "Meilisearch",
     detect: { kind: "dockerService", service: "meilisearch" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
-        { kind: "composeService", service: "meilisearch", image: "getmeili/meilisearch:v1.11", ports: ["7700:7700"] },
+        {
+          kind: "composeService", service: "meilisearch", image: "getmeili/meilisearch:v1.11", ports: [{ container: 7700, host: 7700, env: "MEILI_PORT" }],
+          environment: { MEILI_MASTER_KEY: "change-me", MEILI_NO_ANALYTICS: '"true"' },
+          volume: "/meili_data",
+        },
         { kind: "env", vars: { MEILI_URL: "http://localhost:7700", MEILI_MASTER_KEY: "change-me" } },
       ],
     },
@@ -325,7 +350,12 @@ export const TECHNOLOGIES = [
     apply: {
       verified: false,
       steps: [
-        { kind: "composeService", service: "elasticsearch", image: "elasticsearch:8.15.0", ports: ["9200:9200"] },
+        {
+          kind: "composeService", service: "elasticsearch", image: "elasticsearch:8.15.0", ports: [{ container: 9200, host: 9200, env: "ELASTIC_PORT" }],
+          // برای اجرای تک‌گره‌ایِ لوکال، این دو لازم‌اند وگرنه بالا نمی‌آید.
+          environment: { "discovery.type": "single-node", "xpack.security.enabled": '"false"', ES_JAVA_OPTS: "-Xms512m -Xmx512m" },
+          volume: "/usr/share/elasticsearch/data",
+        },
         { kind: "env", vars: { ELASTIC_URL: "http://localhost:9200" } },
       ],
     },
@@ -344,7 +374,13 @@ export const TECHNOLOGIES = [
     apply: {
       verified: false,
       steps: [
-        { kind: "composeService", service: "minio", image: "minio/minio:latest", ports: ["9000:9000", "9001:9001"] },
+        {
+          kind: "composeService", service: "minio", image: "minio/minio:latest", ports: [{ container: 9000, host: 9000, env: "MINIO_PORT" }, { container: 9001, host: 9001, env: "MINIO_CONSOLE_PORT" }],
+          // MinIO بدونِ command سرور را بالا نمی‌آورد.
+          command: 'server /data --console-address ":9001"',
+          environment: { MINIO_ROOT_USER: "app", MINIO_ROOT_PASSWORD: "change-me-min-8" },
+          volume: "/data",
+        },
         { kind: "env", vars: { MINIO_ENDPOINT: "http://localhost:9000", MINIO_BUCKET: "app" } },
       ],
     },
@@ -401,12 +437,69 @@ export const TECHNOLOGIES = [
   },
 ];
 
+/**
+ * راهِ **برداشتنِ** هر تکنولوژی.
+ *
+ * جدا از خودِ رکوردها نوشته شده تا یک‌جا خوانده شود — چون مهم‌ترین سؤالِ این
+ * جدول این است: «کدام‌ها را نمی‌شود خودکار برداشت؟»
+ *
+ * دو شکل دارد:
+ * - `steps`  → قابلِ برداشتنِ خودکار.
+ * - `manual` → **نمی‌شود** خودکار برداشت، و دلیلش نوشته شده. ابزار در این حالت
+ *   ادعای حذف نمی‌کند؛ صریح می‌گوید «این را خودت باید برداری».
+ *
+ * چرا بعضی‌ها manualاند: یک CLIِ رسمی که یک پوشهٔ کاملِ app ساخته، معکوس
+ * ندارد. پاک‌کردنِ آن پوشه یعنی پاک‌کردنِ کدی که کاربر ممکن است رویش کار کرده
+ * باشد. این تصمیمِ کاربر است، نه ابزار.
+ */
+export const REMOVALS = {
+  node: { manual: "زبانِ اصلی را نمی‌شود دکمه‌ای عوض کرد — کلِ پروژه رویش بنا شده." },
+  python: { steps: [{ kind: "cli", command: "Remove-Item -Recurse -Force .venv" }] },
+
+  pnpm: { manual: "برای عوض‌کردنِ مدیرِ پکیج، lockfile و node_modules را پاک کن و با ابزارِ جدید نصب کن." },
+  npm: { manual: "برای عوض‌کردنِ مدیرِ پکیج، lockfile و node_modules را پاک کن و با ابزارِ جدید نصب کن." },
+
+  turborepo: { steps: [{ kind: "cli", command: "pnpm remove -Dw turbo" }, { kind: "deleteFile", path: "turbo.json" }] },
+  nx: { steps: [{ kind: "cli", command: "pnpm remove -Dw nx" }, { kind: "deleteFile", path: "nx.json" }] },
+
+  "react-router-v7": {
+    manual: "این یک پوشهٔ کاملِ app ساخته (apps/web). حذفش یعنی پاک‌کردنِ کدی که ممکن است رویش کار کرده باشی — خودت تصمیم بگیر و خودت پاکش کن.",
+  },
+  nextjs: {
+    manual: "این یک پوشهٔ کاملِ app ساخته (apps/web). حذفش یعنی پاک‌کردنِ کدی که ممکن است رویش کار کرده باشی — خودت تصمیم بگیر و خودت پاکش کن.",
+  },
+  nestjs: {
+    manual: "این یک پوشهٔ کاملِ app ساخته (apps/api). حذفش یعنی پاک‌کردنِ کدت — خودت تصمیم بگیر و خودت پاکش کن.",
+  },
+  express: { steps: [{ kind: "cli", command: "pnpm --filter api remove express" }] },
+  bullmq: { steps: [{ kind: "cli", command: "pnpm --filter worker remove bullmq ioredis" }] },
+
+  // سرویس‌های Docker: اول خوابانده می‌شوند، بعد از فایلِ compose حذف می‌شوند
+  // (چون آن فایل از رویِ تصمیم‌ها از نو ساخته می‌شود).
+  postgres: { steps: [{ kind: "composeDown", service: "postgres" }] },
+  mysql: { steps: [{ kind: "composeDown", service: "mysql" }] },
+  meilisearch: { steps: [{ kind: "composeDown", service: "meilisearch" }] },
+  elasticsearch: { steps: [{ kind: "composeDown", service: "elasticsearch" }] },
+  minio: { steps: [{ kind: "composeDown", service: "minio" }] },
+  s3: { steps: [] }, // فقط متغیرِ env بود، و آن خودش برداشته می‌شود
+
+  playwright: { steps: [{ kind: "cli", command: "pnpm remove -Dw @playwright/test" }] },
+  cypress: { steps: [{ kind: "cli", command: "pnpm remove -Dw cypress" }] },
+};
+
+export const removalFor = (techId) => REMOVALS[techId] || null;
+
+/** تکنولوژی‌هایی که برداشتنشان دستی است — UI باید صریح بگوید. */
+export const manualRemovalTechnologies = () =>
+  TECHNOLOGIES.filter((t) => REMOVALS[t.id]?.manual).map((t) => t.id);
+
 // ---------------------------------------------------------------- اعتبارسنجی
 
 const DETECT_KINDS = new Set([
   "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "envVar", "all", "any",
 ]);
 const APPLY_KINDS = new Set(["cli", "env", "file", "composeService"]);
+const REMOVE_KINDS = new Set(["cli", "deleteFile", "composeDown"]);
 
 /**
  * درستیِ ساختاریِ خودِ رجیستری.
@@ -468,6 +561,27 @@ export function validateRegistry({ categories = CATEGORIES, technologies = TECHN
     for (const dep of tech.requires || []) {
       if (dep === tech.id) problems.push(`${tech.id}: پیش‌نیازِ خودش است`);
       else if (!techIds.has(dep)) problems.push(`${tech.id}: پیش‌نیازِ ناموجودِ ${dep}`);
+    }
+  }
+
+  // هر تکنولوژی باید راهِ برداشتنش معلوم باشد — حتی اگر جواب «نمی‌شود، دستی
+  // است». نبودنِ این ردیف یعنی ابزار نمی‌داند و ممکن است ادعای حذفِ بی‌پایه بکند.
+  for (const tech of technologies) {
+    if (!Object.prototype.hasOwnProperty.call(REMOVALS, tech.id)) {
+      problems.push(`${tech.id}: راهِ برداشتنش در REMOVALS ثبت نشده`);
+      continue;
+    }
+    const rem = REMOVALS[tech.id];
+    if (rem.manual) {
+      if (typeof rem.manual !== "string" || rem.manual.length < 10) {
+        problems.push(`${tech.id}: دلیلِ دستی‌بودنِ حذف باید توضیح داده شود`);
+      }
+    } else if (!Array.isArray(rem.steps)) {
+      problems.push(`${tech.id}: remove باید steps یا manual داشته باشد`);
+    } else {
+      for (const step of rem.steps) {
+        if (!REMOVE_KINDS.has(step.kind)) problems.push(`${tech.id}: نوعِ حذفِ ناشناخته «${step.kind}»`);
+      }
     }
   }
 
