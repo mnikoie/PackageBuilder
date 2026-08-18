@@ -9,7 +9,8 @@
   },
   "scripts": {
     "pb": "node src/cli.mjs",
-    "test": "node --test \"tests/**/*.test.mjs\""
+    "test": "node --test \"tests/**/*.test.mjs\"",
+    "e2e": "playwright test --config playwright.config.mjs"
   },
   "_note": "وابستگی‌ها فهرستِ سفیدِ صریح دارند و tests/independence.test.mjs آن را اجبار می‌کند — اضافه‌کردنِ وابستگیِ جدید باید تصمیمِ آگاهانه باشد، نه لغزشِ بی‌صدا. این چهار مورد در قدمِ ۵ (ترمینالِ واقعی) لازم شدند؛ قدم‌های ۲ تا ۴ صفر وابستگی داشتند.",
   "dependencies": {
@@ -17,5 +18,8 @@
     "@xterm/xterm": "^6.0.0",
     "node-pty": "^1.1.0",
     "ws": "^8.21.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.62.1"
   }
 }

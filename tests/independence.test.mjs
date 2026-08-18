@@ -54,7 +54,7 @@ describe("استقلال از محیط", () => {
     // نه حتی به‌عنوانِ مثالِ راهنما (کاربر آن را وابستگی می‌خواند، و حق دارد).
     const forbidden = ["TaminLibrary", "NilaLibrary", "AIProject", "PackageBuilder\\", "PRG1", "PRG2"];
     const offenders = [];
-    for (const file of [...sourceFiles(join(ROOT, "src")), ...sourceFiles(join(ROOT, "tests"))]) {
+    for (const file of [...sourceFiles(join(ROOT, "src")), ...sourceFiles(join(ROOT, "tests")), ...sourceFiles(join(ROOT, "e2e"))]) {
       if (isGuardFile(file)) continue;
       const text = readFileSync(file, "utf8");
       for (const word of forbidden) {
@@ -93,6 +93,7 @@ describe("استقلال از محیط", () => {
     "ws",                 // خروجیِ ترمینال جریانی است؛ درخواست/پاسخ جواب نمی‌دهد
     "@xterm/xterm",       // نمایشِ ترمینال در مرورگر (همان که VS Code استفاده می‌کند)
     "@xterm/addon-fit",   // اندازهٔ درستِ ستون/سطر
+    "@playwright/test",   // تستِ سرتاسری در مرورگرِ واقعی (قدمِ ۸)
   ]);
 
   test("هیچ وابستگیِ خارج از فهرستِ سفید اضافه نشده", () => {

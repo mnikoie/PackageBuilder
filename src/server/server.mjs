@@ -29,6 +29,9 @@ import { WebSocketServer } from "ws";
 import pty from "node-pty";
 
 import { probeProject } from "../core/detect.mjs";
+import { resolveRegistry } from "../core/resolve.mjs";
+import { validateRegistry } from "../core/registry.mjs";
+import { applyTechnology, revertTechnology } from "../core/apply.mjs";
 import { createTerminal } from "./terminal.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -168,10 +171,45 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
     return sendJson(res, 200, { ok: true, stepId });
   }
 
+  /**
+   * اعمال یا برگشتِ یک تصمیم، از خودِ صفحه.
+   *
+   * همان محافظت‌های /api/run: فقط POST، توکنِ صفحه، و بررسیِ مبدأ. چون این هم
+   * فرمانِ واقعی روی این کامپیوتر اجرا می‌کند.
+   */
+  async function handleDecision(req, res, kind) {
+    if (!originAllowed(req)) return sendJson(res, 403, { ok: false, error: "مبدأِ درخواست پذیرفته نشد." });
+    if (!tokenMatches(token, req.headers["x-pb-token"])) {
+      return sendJson(res, 401, { ok: false, error: "توکن نامعتبر است." });
+    }
+
+    let body;
+    try {
+      body = await readJsonBody(req);
+    } catch (err) {
+      return sendJson(res, err.status || 400, { ok: false, error: err.message });
+    }
+
+    const projectPath = typeof body.path === "string" ? body.path.trim() : "";
+    const techId = typeof body.tech === "string" ? body.tech.trim() : "";
+    if (!projectPath || !techId) return sendJson(res, 400, { ok: false, error: "مسیر و شناسهٔ تکنولوژی لازم است." });
+
+    try {
+      const result = kind === "apply"
+        ? await applyTechnology({ projectPath, techId, terminal: term, dryRun: !!body.dryRun })
+        : await revertTechnology({ projectPath, techId, terminal: term });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 500, { ok: false, error: `خطای غیرمنتظره: ${err.message}` });
+    }
+  }
+
   const server = createServer((req, res) => {
     const url = new URL(req.url, `http://${host}:${port}`);
 
     if (req.method === "POST" && url.pathname === "/api/run") return handleRun(req, res);
+    if (req.method === "POST" && url.pathname === "/api/apply") return handleDecision(req, res, "apply");
+    if (req.method === "POST" && url.pathname === "/api/revert") return handleDecision(req, res, "revert");
 
     if (req.method !== "GET") {
       return sendJson(res, 405, { ok: false, error: "متد پذیرفته نشد." });
@@ -198,6 +236,20 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
       if (!target) return sendJson(res, 400, { ok: false, error: "مسیرِ پوشه داده نشده." });
       try {
         return sendJson(res, 200, { ok: true, probe: probeProject(target) });
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, error: `خطا در بررسی: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === "/api/stack") {
+      const target = (url.searchParams.get("path") || "").trim();
+      if (!target) return sendJson(res, 400, { ok: false, error: "مسیرِ پوشه داده نشده." });
+      const problems = validateRegistry();
+      if (problems.length) return sendJson(res, 500, { ok: false, error: `رجیستری ایراد دارد: ${problems[0]}` });
+      try {
+        const probe = probeProject(target);
+        if (!probe.exists || !probe.isDirectory) return sendJson(res, 200, { ok: false, error: probe.error });
+        return sendJson(res, 200, { ok: true, stack: resolveRegistry(probe.path, { probe }) });
       } catch (err) {
         return sendJson(res, 500, { ok: false, error: `خطا در بررسی: ${err.message}` });
       }

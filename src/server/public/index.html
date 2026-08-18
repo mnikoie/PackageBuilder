@@ -98,6 +98,39 @@
     background: #2a2f37; color: var(--muted); font-family: Consolas, monospace;
   }
 
+  /* ---- تصمیم‌ها ---- */
+  .cat { border-top: 1px solid #21262d; padding: 10px 14px; }
+  .cat:first-child { border-top: none; }
+  .cat > .head { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+  .cat > .head .name { font-weight: 700; }
+  .cat > .head .q { color: var(--muted); font-size: .78rem; }
+  .cat .verdict { font-size: .76rem; font-weight: 700; }
+  .cat .verdict.chosen { color: var(--ok); }
+  .cat .verdict.none { color: var(--muted); }
+  .cat .verdict.clash { color: var(--no); }
+  .cat .verdict.vague { color: var(--maybe); }
+
+  .opt { display: flex; align-items: flex-start; gap: 10px; padding: 7px 0 7px 16px; }
+  .opt + .opt { border-top: 1px dashed #21262d; }
+  .opt .body { flex: 1; min-width: 0; }
+  .opt .title { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .opt .title b { font-weight: 700; }
+  .opt .why { color: var(--muted); font-size: .76rem; }
+  .opt .prosCons { color: var(--muted); font-size: .74rem; margin-top: 3px; }
+  .opt .prosCons .plus { color: var(--ok); }
+  .opt .prosCons .minus { color: var(--no); }
+  .opt .acts { display: flex; gap: 6px; flex: 0 0 auto; }
+  .opt button {
+    padding: 4px 12px; font-size: .74rem; font-weight: 600; cursor: pointer;
+    border-radius: 6px; border: 1px solid var(--border); background: transparent; color: var(--text);
+  }
+  .opt button.go { border-color: var(--ok); color: var(--ok); }
+  .opt button.undo { border-color: var(--no); color: var(--no); }
+  .opt button:hover:not(:disabled) { filter: brightness(1.35); }
+  .opt button:disabled { opacity: .35; cursor: not-allowed; }
+  .warn-tag { font-size: .68rem; padding: 1px 7px; border-radius: 20px; background: var(--maybe-bg); color: var(--maybe); }
+  .busy { color: var(--accent); font-size: .76rem; }
+
   .empty { color: var(--muted); padding: 10px 14px; font-style: italic; }
   .err { border-color: var(--no); }
   .err > h2 { color: var(--no); border-color: var(--no); }
@@ -124,6 +157,7 @@
       <span><span class="chip maybe">؟ نامعلوم</span> <b>نتوانستیم بپرسیم</b></span>
     </div>
 
+    <div id="decisions"></div>
     <div id="out"></div>
 
     <div class="ro">
@@ -149,6 +183,10 @@
 <script>
   const $ = (id) => document.getElementById(id);
   const CHIP = { present: ["ok", "✓ هست"], absent: ["no", "✗ نیست"], unknown: ["maybe", "؟ نامعلوم"] };
+
+  // توکنِ همین صفحه. سرور آن را هنگامِ سِرو کردن تزریق می‌کند و صفحهٔ بیگانه
+  // نمی‌تواند بخواندش — پس فقط از داخلِ همین صفحه می‌شود فرمان اجرا کرد.
+  const TOKEN = document.querySelector('meta[name="pb-token"]').content;
 
   const el = (tag, cls, text) => {
     const n = document.createElement(tag);
@@ -296,6 +334,129 @@
     }
   }
 
+  // ------------------------------------------------------------- تصمیم‌ها
+
+  let busy = false;
+
+  /** یک تصمیم را اعمال یا برمی‌گرداند. فرمان‌ها در ترمینالِ کنار دیده می‌شوند. */
+  async function decide(kind, path, techId, label, btn) {
+    if (busy) return;
+    busy = true;
+    const original = btn.textContent;
+    btn.textContent = "در حالِ اجرا…";
+    btn.disabled = true;
+
+    try {
+      const res = await fetch("/api/" + kind, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-pb-token": TOKEN },
+        body: JSON.stringify({ path, tech: techId }),
+      });
+      const r = await res.json();
+
+      if (!r.ok) {
+        alert(`انجام نشد — ${label}\n\n${r.error}` + (r.snippet ? `\n\nاین را خودت اضافه کن:\n${r.snippet}` : ""));
+      } else if (r.alreadyPresent) {
+        alert(`${label} از قبل نصب است.\n\n${r.evidence}`);
+      } else {
+        const lines = [kind === "apply" ? `✓ اعمال شد: ${label}` : `✓ برگشت انجام شد: ${label}`, ""];
+        lines.push(`وضعیتِ واقعیِ الان: ${r.evidence}`);
+        if (kind === "apply" && !r.verified) lines.push("\nتوجه: فرمان‌ها اجرا شدند ولی مدرکِ نصب دیده نشد.");
+        if (r.manualSteps?.length) lines.push("\nکارهایی که خودکار انجام نشد:\n" + r.manualSteps.map((s) => "• " + s).join("\n"));
+        alert(lines.join("\n"));
+      }
+    } catch (err) {
+      alert("درخواست به سرور نرسید: " + err.message);
+    } finally {
+      busy = false;
+      btn.textContent = original;
+      btn.disabled = false;
+      loadDecisions();
+      load();
+    }
+  }
+
+  function renderDecisions(path, stack) {
+    const host = $("decisions");
+    host.textContent = "";
+
+    const cats = stack.categories.map((cat) => {
+      const box = el("div", "cat");
+
+      const head = el("div", "head");
+      head.append(el("span", "name", cat.label), el("span", "q", cat.question));
+      const chosenOpt = cat.options.find((o) => o.id === cat.chosen);
+      if (cat.conflict) {
+        head.append(el("span", "verdict clash", `⚠ چند گزینه همزمان نصب‌اند: ${cat.conflict.join("، ")}`));
+      } else if (chosenOpt) {
+        head.append(el("span", "verdict chosen", `✓ ${chosenOpt.label}`));
+      } else if (cat.uncertain) {
+        head.append(el("span", "verdict vague", "؟ نامعلوم"));
+      } else {
+        head.append(el("span", "verdict none", "— انتخاب نشده"));
+      }
+      box.append(head);
+
+      for (const opt of cat.options) {
+        const o = el("div", "opt");
+        const body = el("div", "body");
+
+        const title = el("div", "title");
+        const [cls, caption] = CHIP[opt.state] || ["maybe", "؟"];
+        title.append(el("span", "chip " + cls, caption), el("b", null, opt.label));
+        if (!opt.verified) title.append(el("span", "warn-tag", "نصبش آزمایش‌نشده"));
+        if (opt.missingRequirements.length) {
+          title.append(el("span", "warn-tag", `اول لازم است: ${opt.missingRequirements.join("، ")}`));
+        }
+        body.append(title);
+        body.append(el("div", "why", opt.evidence));
+
+        if (opt.meta) {
+          const pc = el("div", "prosCons");
+          pc.append(el("span", "plus", "+ " + opt.meta.pros[0]));
+          pc.append(document.createTextNode("   "));
+          pc.append(el("span", "minus", "− " + opt.meta.cons[0]));
+          body.append(pc);
+        }
+        o.append(body);
+
+        const acts = el("div", "acts");
+        const installed = opt.state === "present";
+        const blocked = opt.missingRequirements.length > 0;
+
+        const goBtn = el("button", "go", "نصب کن");
+        goBtn.disabled = installed || blocked;
+        goBtn.title = installed ? "از قبل نصب است" : blocked ? "اول پیش‌نیازش را نصب کن" : "";
+        goBtn.addEventListener("click", () => decide("apply", path, opt.id, opt.label, goBtn));
+
+        const undoBtn = el("button", "undo", "بردار");
+        undoBtn.disabled = !installed;
+        undoBtn.addEventListener("click", () => decide("revert", path, opt.id, opt.label, undoBtn));
+
+        acts.append(goBtn, undoBtn);
+        o.append(acts);
+        box.append(o);
+      }
+      return box;
+    });
+
+    host.append(card("تصمیم‌ها — انتخاب کن، دکمه بزن", cats));
+  }
+
+  async function loadDecisions() {
+    const path = $("path").value.trim();
+    const host = $("decisions");
+    if (!path) { host.textContent = ""; return; }
+    try {
+      const r = await fetch("/api/stack?path=" + encodeURIComponent(path));
+      const data = await r.json();
+      if (!data.ok) { host.textContent = ""; return; }
+      renderDecisions(path, data.stack);
+    } catch {
+      host.textContent = "";
+    }
+  }
+
   async function load() {
     const path = $("path").value.trim();
     const out = $("out");
@@ -314,15 +475,13 @@
     }
   }
 
-  $("go").addEventListener("click", load);
-  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") load(); });
+  $("go").addEventListener("click", () => { load(); loadDecisions(); });
+  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") { load(); loadDecisions(); } });
 
   let timer = null;
-  $("path").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(load, 500); });
+  $("path").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { load(); loadDecisions(); }, 500); });
 
   // ---------------------------------------------------------------- ترمینال
-
-  const TOKEN = document.querySelector('meta[name="pb-token"]').content;
 
   const term = new Terminal({
     fontFamily: "'Cascadia Mono', Consolas, monospace",
@@ -338,6 +497,9 @@
   const fitAddon = new FitAddon.FitAddon();
   term.loadAddon(fitAddon);
   term.open($("terminal"));
+  // صریح در دسترس می‌گذاریمش تا تستِ سرتاسری بتواند محتوای واقعیِ ترمینال را
+  // بخواند و ثابت کند فرمان‌ها پنهان اجرا نشده‌اند.
+  window.term = term;
   // اندازه را بعد از چیده‌شدنِ صفحه حساب کن، وگرنه ستون/سطر غلط درمی‌آید و
   // نوارهای پیشرفت (که با \r بازنویسی می‌کنند) خط‌خطی می‌شوند.
   requestAnimationFrame(() => fitAddon.fit());
@@ -419,7 +581,7 @@
 
   // مسیر در آدرسِ صفحه هم قابلِ دادن است: /?path=...
   const fromUrl = new URLSearchParams(location.search).get("path");
-  if (fromUrl) { $("path").value = fromUrl; load(); }
+  if (fromUrl) { $("path").value = fromUrl; load(); loadDecisions(); }
 </script>
 </body>
 </html>
