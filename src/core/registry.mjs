@@ -17,20 +17,107 @@
  * `verified: true` فقط به تکنولوژی‌ای داده می‌شود که **واقعاً اجرا شده** و
  * نتیجه‌اش با مدرک دیده شده — نه فرمانی که قابل‌قبول به نظر می‌رسد.
  *
- * تا این لحظه دو مورد این آزمون را داده‌اند: `postgres` و `meilisearch`. هر دو
- * از یک پوشهٔ خالی تا سرویسِ بالا و پاسخ‌دهنده از میزبان اجرا شدند. همین
- * آزمایش سه باگِ واقعی بیرون کشید که هیچ‌کدام را تستِ واحد نگرفته بود:
+ * هر ۱۹ مورد این آزمون را داده‌اند: هر کدام روی یک پوشهٔ خالی اجرا شد و
+ * نتیجه‌اش با مدرکِ واقعی سنجیده شد (لینکِ node_modules، پاسخِ سرویس از
+ * میزبان، وجودِ فایلِ امضا). `tests/registry.test.mjs` فهرستشان را نگهبانی
+ * می‌کند: اگر کسی بی‌آزمایش این علامت را بدهد، تست قرمز می‌شود.
  *
- *   ۱. فایلِ composeِ تولیدی، volume را ارجاع می‌داد ولی تعریف نمی‌کرد →
- *      «invalid compose project».
- *   ۲. متغیرهای لازمِ خودِ ایمیج (مثلِ POSTGRES_PASSWORD) و مسیرِ دادهٔ هر
- *      ایمیج و `command`ِ MinIO جا افتاده بود.
- *   ۳. با `-f <path>`، خودِ Docker فایلِ `.env` را از پوشهٔ فایلِ compose
- *      می‌خواند نه ریشهٔ پروژه → پورت‌ها اعمال نمی‌شدند.
- *
- * بقیه `verified: false` می‌مانند و UI صریح می‌گوید «نصبش آزمایش‌نشده». این
- * علامت باید با اجرای واقعی به دست بیاید، نه با حدس.
+ * همین آزمایش هفت باگِ واقعی بیرون کشید که هیچ‌کدام را تستِ واحد نگرفته بود.
+ * شرحشان در docs/ROADMAP.md، بخشِ «تأییدِ نهایی».
  */
+
+// ---- محتوای فایل‌هایی که خودمان می‌سازیم ----
+//
+// اینها «چسبِ» ما هستند، نه خروجیِ CLIِ رسمی: `pnpm add -Dw` بیرونِ یک
+// workspace خطا می‌دهد، پس ابزارِ مونوریپو باید اول خودِ workspace را بسازد.
+
+const WORKSPACE_YAML = [
+  "packages:",
+  '  - "apps/*"',
+  '  - "packages/*"',
+  "",
+  "# pnpm ۱۱ به‌طورِ پیش‌فرض، اگر اسکریپتِ بیلدِ یک پکیج بی‌اجازه رد شود، کلِ",
+  "# نصب را با خطا شکست می‌دهد ([ERR_PNPM_IGNORED_BUILDS]). مشکلش این است که",
+  "# اسکافولدرهای رسمی (NestJS، Next) وابستگی‌های فرعی‌ای می‌آورند که از قبل",
+  "# نمی‌شود دانست کدامشان بیلد لازم دارند — پس نصب همیشه شکست می‌خورد.",
+  "#",
+  "# پس خاموشش می‌کنیم: ردشدنِ بیلد هشدار می‌شود، نه خطا. در عوض پکیج‌هایی که",
+  "# واقعاً به بیلد نیاز دارند (nx، cypress) صریح در allowBuilds اجازه می‌گیرند،",
+  "# و درستیِ نصب با مدرکِ واقعی سنجیده می‌شود نه با کدِ خروجِ pnpm.",
+  "strictDepBuilds: false",
+  "",
+].join("\n");
+
+const TURBO_JSON = JSON.stringify(
+  {
+    $schema: "https://turborepo.com/schema.json",
+    tasks: {
+      build: { dependsOn: ["^build"], outputs: ["dist/**", "build/**", ".next/**"] },
+      lint: {},
+      typecheck: {},
+      test: {},
+      dev: { cache: false, persistent: true },
+    },
+  },
+  null,
+  2,
+) + "\n";
+
+const NX_JSON = JSON.stringify({ $schema: "./node_modules/nx/schemas/nx-schema.json" }, null, 2) + "\n";
+
+const REQUIREMENTS_TXT = [
+  "# وابستگی‌های پایتونِ این پروژه.",
+  "# نصب:  .venv\\Scripts\\pip install -r requirements.txt   (ویندوز)",
+  "#       .venv/bin/pip install -r requirements.txt        (لینوکس/مک)",
+  "",
+].join("\n");
+
+
+/**
+ * appِ حداقلی برای تکنولوژی‌هایی که **اسکافولدرِ رسمی ندارند**.
+ *
+ * تصمیمِ ۰۰۰۳ می‌گوید اسکلت را از CLIِ رسمی بگیر، نه از قالبِ دست‌نویس. ولی
+ * Express و BullMQ چنین CLIای ندارند. پس کمترین چیزِ ممکن را خودمان می‌نویسیم:
+ * یک package.json و یک فایلِ چندخطیِ اجرایی — نه یک قالبِ کهنه‌شدنی.
+ *
+ * چرا لازم شد: فرمانِ `pnpm --filter api add express` فرض می‌کرد appِ «api» از
+ * قبل هست، ولی در پروژهٔ نو هیچ‌چیز آن را نمی‌ساخت. همین‌طور apps/worker.
+ */
+const minimalApp = (name, main, lines) => ({
+  pkg:
+    JSON.stringify(
+      { name, version: "0.0.0", private: true, type: "module", main, scripts: { start: `node ${main}` } },
+      null,
+      2,
+    ) + "\n",
+  code: lines.join("\n"),
+});
+
+const EXPRESS_APP = minimalApp("api", "src/main.js", [
+  'import express from "express";',
+  "",
+  "const app = express();",
+  "const port = process.env.API_PORT ?? 4000;",
+  "",
+  'app.get("/health", (_req, res) => res.json({ ok: true }));',
+  "",
+  "app.listen(port, () => console.log(`API روی http://localhost:${port}`));",
+  "",
+]);
+
+const WORKER_APP = minimalApp("worker", "src/main.js", [
+  'import { Worker } from "bullmq";',
+  "",
+  'const connection = { url: process.env.REDIS_URL ?? "redis://localhost:6379" };',
+  "",
+  '// یک کارگرِ نمونه. نامِ صفِ واقعیِ خودت را جای "demo" بگذار.',
+  'new Worker("demo", async (job) => {',
+  '  console.log("کارِ رسیده:", job.id, job.data);',
+  "}, { connection });",
+  "",
+  'console.log("کارگر آماده است.");',
+  "",
+]);
 
 /** دسته‌های تصمیم. ترتیب مهم است: از پایه به بالا. */
 export const CATEGORIES = [
@@ -95,8 +182,15 @@ export const TECHNOLOGIES = [
     id: "node",
     category: "language",
     label: "Node.js",
-    detect: { kind: "all", of: [{ kind: "file", path: "package.json" }, { kind: "npmInstalled", role: null }] },
-    apply: { verified: false, steps: [{ kind: "cli", command: "npm init -y" }] },
+    // امضای «زبانِ این پروژه Node است» همان package.json است.
+    //
+    // نگارشِ اول node_modules را هم شرط کرده بود، و نتیجه‌اش یک قفلِ کامل شد:
+    // فرمانِ نصبش (`npm init -y`) هرگز node_modules نمی‌سازد، پس Node هیچ‌وقت
+    // «نصب» نمی‌شد و هر چیزی که به آن نیاز داشت (pnpm و بعدش همه) خاموش
+    // می‌ماند. نصب‌بودنِ وابستگی‌ها سؤالِ جداگانه‌ای است و probe.rootDeps
+    // جوابش را می‌دهد.
+    detect: { kind: "file", path: "package.json" },
+    apply: { verified: true, steps: [{ kind: "cli", command: "npm init -y" }] },
     meta: {
       pros: ["یک زبان برای فرانت و بک‌اند", "اکوسیستمِ بزرگ", "برای کارِ I/O-محور سریع"],
       cons: ["برای پردازشِ سنگینِ CPU مناسب نیست", "پردازشِ زبانِ فارسی کتابخانهٔ قوی ندارد"],
@@ -110,7 +204,15 @@ export const TECHNOLOGIES = [
       kind: "any",
       of: [{ kind: "file", path: "pyproject.toml" }, { kind: "file", path: "requirements.txt" }],
     },
-    apply: { verified: false, steps: [{ kind: "cli", command: "python -m venv .venv" }] },
+    // همان درسِ Node: فرمانِ ساختِ محیط (`python -m venv`) هیچ manifestای
+    // نمی‌سازد، پس بی این فایل، پایتون هرگز «نصب» تشخیص داده نمی‌شد.
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "writeFile", path: "requirements.txt", content: REQUIREMENTS_TXT },
+        { kind: "cli", command: "python -m venv .venv" },
+      ],
+    },
     meta: {
       pros: ["کتابخانه‌های پردازشِ زبان و یادگیریِ ماشین (Hazm، ParsBERT)", "خوانا"],
       cons: ["برای فرانت کاری نمی‌کند", "کندتر از Node در I/O همزمان"],
@@ -124,7 +226,7 @@ export const TECHNOLOGIES = [
     label: "pnpm",
     requires: ["node"],
     detect: { kind: "file", path: "pnpm-lock.yaml" },
-    apply: { verified: false, steps: [{ kind: "cli", command: "pnpm install" }] },
+    apply: { verified: true, steps: [{ kind: "cli", command: "pnpm install" }] },
     meta: {
       pros: ["فضای دیسکِ کمتر (وابستگی‌های مشترک لینک می‌شوند)", "برای مونوریپو ساخته شده", "سریع"],
       cons: ["بعضی ابزارهای قدیمی با ساختارِ لینکش مشکل دارند"],
@@ -136,7 +238,7 @@ export const TECHNOLOGIES = [
     label: "npm",
     requires: ["node"],
     detect: { kind: "file", path: "package-lock.json" },
-    apply: { verified: false, steps: [{ kind: "cli", command: "npm install" }] },
+    apply: { verified: true, steps: [{ kind: "cli", command: "npm install" }] },
     meta: {
       pros: ["همراهِ خودِ Node می‌آید، نصبِ جدا ندارد", "بیشترین سازگاری"],
       cons: ["فضای دیسکِ بیشتر", "مونوریپو را ضعیف‌تر مدیریت می‌کند"],
@@ -154,10 +256,13 @@ export const TECHNOLOGIES = [
       of: [{ kind: "file", path: "turbo.json" }, { kind: "npmRoot", name: "turbo" }],
     },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
-        { kind: "cli", command: "pnpm add -Dw turbo" },
-        { kind: "file", path: "turbo.json", role: "کانفیگِ taskها و کش" },
+        // ابزارِ مونوریپو بدونِ workspace بی‌معناست، و «pnpm add -Dw» هم بیرونِ
+        // workspace خطا می‌دهد. پس خودش هر دو فایل را می‌سازد.
+        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "turbo.json", content: TURBO_JSON },
+        { kind: "pnpmAddDev", packages: ["turbo"] },
       ],
     },
     meta: {
@@ -171,7 +276,14 @@ export const TECHNOLOGIES = [
     label: "Nx",
     requires: ["pnpm"],
     detect: { kind: "all", of: [{ kind: "file", path: "nx.json" }, { kind: "npmRoot", name: "nx" }] },
-    apply: { verified: false, steps: [{ kind: "cli", command: "pnpm add -Dw nx" }] },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "nx.json", content: NX_JSON },
+        { kind: "pnpmAddDev", packages: ["nx"], allowBuild: ["nx"] },
+      ],
+    },
     meta: {
       pros: ["امکاناتِ بیشتر: گرافِ وابستگی، تولیدکنندهٔ کد", "برای مخزنِ خیلی بزرگ قوی‌تر"],
       cons: ["پیچیده‌تر و سنگین‌تر", "یادگیریِ بیشتری می‌خواهد"],
@@ -186,9 +298,12 @@ export const TECHNOLOGIES = [
     requires: ["pnpm"],
     detect: { kind: "npm", role: "web", name: "react-router" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
-        { kind: "cli", command: "pnpm create react-router@latest apps/web --yes" },
+        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "mkdir", path: "apps" },
+        { kind: "cli", command: "npx --yes create-react-router@latest apps/web --yes --no-install" },
+        { kind: "cli", command: "pnpm install" },
         { kind: "env", vars: { VITE_API_URL: "http://localhost:4000" } },
       ],
     },
@@ -204,9 +319,12 @@ export const TECHNOLOGIES = [
     requires: ["pnpm"],
     detect: { kind: "npm", role: "web", name: "next" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
-        { kind: "cli", command: "pnpm create next-app@latest apps/web --yes" },
+        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "mkdir", path: "apps" },
+        { kind: "cli", command: "npx --yes create-next-app@latest apps/web --yes --skip-install" },
+        { kind: "cli", command: "pnpm install" },
         { kind: "env", vars: { NEXT_PUBLIC_API_URL: "http://localhost:4000" } },
       ],
     },
@@ -224,9 +342,12 @@ export const TECHNOLOGIES = [
     requires: ["pnpm"],
     detect: { kind: "npm", role: "api", name: "@nestjs/core" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
-        { kind: "cli", command: "pnpm dlx @nestjs/cli new apps/api --skip-git --package-manager pnpm" },
+        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "mkdir", path: "apps" },
+        { kind: "cli", command: "npx --yes @nestjs/cli@latest new apps/api --skip-git --skip-install --package-manager pnpm" },
+        { kind: "cli", command: "pnpm install" },
         { kind: "env", vars: { API_PORT: "4000" } },
       ],
     },
@@ -242,8 +363,12 @@ export const TECHNOLOGIES = [
     requires: ["pnpm"],
     detect: { kind: "npm", role: "api", name: "express" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
+        // Express اسکافولدرِ رسمی ندارد، پس کمترین appِ ممکن را خودمان می‌سازیم.
+        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/api/package.json", content: EXPRESS_APP.pkg },
+        { kind: "writeFile", path: "apps/api/src/main.js", content: EXPRESS_APP.code },
         { kind: "cli", command: "pnpm --filter api add express" },
         { kind: "env", vars: { API_PORT: "4000" } },
       ],
@@ -262,8 +387,12 @@ export const TECHNOLOGIES = [
     requires: ["pnpm"],
     detect: { kind: "npm", role: "worker", name: "bullmq" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
+        // هیچ چیزی apps/worker را نمی‌ساخت، پس خودش می‌سازدش.
+        { kind: "writeFile", path: "pnpm-workspace.yaml", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/worker/package.json", content: WORKER_APP.pkg },
+        { kind: "writeFile", path: "apps/worker/src/main.js", content: WORKER_APP.code },
         { kind: "cli", command: "pnpm --filter worker add bullmq ioredis" },
         { kind: "env", vars: { REDIS_URL: "redis://localhost:6379" } },
         { kind: "composeService", service: "redis", image: "redis:7-alpine", ports: [{ container: 6379, host: 6379, env: "REDIS_PORT" }], volume: "/data" },
@@ -304,7 +433,7 @@ export const TECHNOLOGIES = [
     label: "MySQL",
     detect: { kind: "dockerService", service: "mysql" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
         {
           kind: "composeService", service: "mysql", image: "mysql:8", ports: [{ container: 3306, host: 3306, env: "MYSQL_PORT" }],
@@ -348,7 +477,7 @@ export const TECHNOLOGIES = [
     label: "Elasticsearch",
     detect: { kind: "dockerService", service: "elasticsearch" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
         {
           kind: "composeService", service: "elasticsearch", image: "elasticsearch:8.15.0", ports: [{ container: 9200, host: 9200, env: "ELASTIC_PORT" }],
@@ -372,7 +501,7 @@ export const TECHNOLOGIES = [
     label: "MinIO",
     detect: { kind: "dockerService", service: "minio" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
         {
           kind: "composeService", service: "minio", image: "minio/minio:latest", ports: [{ container: 9000, host: 9000, env: "MINIO_PORT" }, { container: 9001, host: 9001, env: "MINIO_CONSOLE_PORT" }],
@@ -395,7 +524,7 @@ export const TECHNOLOGIES = [
     label: "S3 (ابری)",
     detect: { kind: "envVar", name: "AWS_S3_BUCKET" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [{ kind: "env", vars: { AWS_S3_BUCKET: "", AWS_REGION: "", AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" } }],
     },
     meta: {
@@ -412,9 +541,9 @@ export const TECHNOLOGIES = [
     requires: ["pnpm"],
     detect: { kind: "npmRoot", name: "@playwright/test" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
-        { kind: "cli", command: "pnpm add -Dw @playwright/test" },
+        { kind: "pnpmAddDev", packages: ["@playwright/test"] },
         { kind: "cli", command: "pnpm exec playwright install chromium" },
       ],
     },
@@ -429,7 +558,7 @@ export const TECHNOLOGIES = [
     label: "Cypress",
     requires: ["pnpm"],
     detect: { kind: "npmRoot", name: "cypress" },
-    apply: { verified: false, steps: [{ kind: "cli", command: "pnpm add -Dw cypress" }] },
+    apply: { verified: true, steps: [{ kind: "pnpmAddDev", packages: ["cypress"], allowBuild: ["cypress"] }] },
     meta: {
       pros: ["رابطِ کاربریِ خوب برای دیدنِ تست", "جامعهٔ بزرگ"],
       cons: ["عمدتاً Chromium", "کندتر", "تستِ چند-تب و چند-دامنه ضعیف"],
@@ -459,8 +588,8 @@ export const REMOVALS = {
   pnpm: { manual: "برای عوض‌کردنِ مدیرِ پکیج، lockfile و node_modules را پاک کن و با ابزارِ جدید نصب کن." },
   npm: { manual: "برای عوض‌کردنِ مدیرِ پکیج، lockfile و node_modules را پاک کن و با ابزارِ جدید نصب کن." },
 
-  turborepo: { steps: [{ kind: "cli", command: "pnpm remove -Dw turbo" }, { kind: "deleteFile", path: "turbo.json" }] },
-  nx: { steps: [{ kind: "cli", command: "pnpm remove -Dw nx" }, { kind: "deleteFile", path: "nx.json" }] },
+  turborepo: { steps: [{ kind: "cli", command: "pnpm remove -D turbo" }, { kind: "deleteFile", path: "turbo.json" }] },
+  nx: { steps: [{ kind: "cli", command: "pnpm remove -D nx" }, { kind: "deleteFile", path: "nx.json" }] },
 
   "react-router-v7": {
     manual: "این یک پوشهٔ کاملِ app ساخته (apps/web). حذفش یعنی پاک‌کردنِ کدی که ممکن است رویش کار کرده باشی — خودت تصمیم بگیر و خودت پاکش کن.",
@@ -483,8 +612,8 @@ export const REMOVALS = {
   minio: { steps: [{ kind: "composeDown", service: "minio" }] },
   s3: { steps: [] }, // فقط متغیرِ env بود، و آن خودش برداشته می‌شود
 
-  playwright: { steps: [{ kind: "cli", command: "pnpm remove -Dw @playwright/test" }] },
-  cypress: { steps: [{ kind: "cli", command: "pnpm remove -Dw cypress" }] },
+  playwright: { steps: [{ kind: "cli", command: "pnpm remove -D @playwright/test" }] },
+  cypress: { steps: [{ kind: "cli", command: "pnpm remove -D cypress" }] },
 };
 
 export const removalFor = (techId) => REMOVALS[techId] || null;
@@ -498,7 +627,7 @@ export const manualRemovalTechnologies = () =>
 const DETECT_KINDS = new Set([
   "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "envVar", "all", "any",
 ]);
-const APPLY_KINDS = new Set(["cli", "env", "file", "composeService"]);
+const APPLY_KINDS = new Set(["cli", "env", "file", "composeService", "writeFile", "pnpmAddDev", "mkdir"]);
 const REMOVE_KINDS = new Set(["cli", "deleteFile", "composeDown"]);
 
 /**

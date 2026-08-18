@@ -61,6 +61,70 @@ export function applyEnvVars(projectPath, { techLabel, vars }) {
   };
 }
 
+/**
+ * اجازهٔ اجرای اسکریپتِ بیلد به چند پکیج، در `pnpm-workspace.yaml`.
+ *
+ * چرا لازم است: pnpm ۱۰+ به‌دلیلِ امنیت، `postinstall`ِ پکیج‌ها را بی‌اجازه
+ * اجرا نمی‌کند و با `[ERR_PNPM_IGNORED_BUILDS]` کدِ خروجِ غیرصفر می‌دهد. پکیج
+ * نصب می‌شود ولی ناقص است — و ابزار درست «شکست» گزارش می‌دهد.
+ *
+ * ما این فایل را خودمان می‌سازیم، پس ادغامِ سطری بی‌خطر است. اگر فایل نبود،
+ * ساخته نمی‌شود: بی workspace، این تنظیم جایی ندارد.
+ */
+export function allowPnpmBuilds(projectPath, packages) {
+  const file = join(projectPath, "pnpm-workspace.yaml");
+  if (!existsSync(file)) return { changed: false, reason: "فایلِ workspace نیست" };
+
+  // نگارشِ اول کلیدِ `onlyBuiltDependencies` را نوشت — نگارشِ pnpm ۱۰. ولی
+  // pnpm ۱۱ کلیدِ `allowBuilds` با مقدارِ بولی می‌خواهد، و خودش هم همین را
+  // به فایل اضافه کرد با یادداشتِ «set this to true or false». پس همان.
+  const text = readFileSync(file, "utf8");
+  const lines = text.split(/\r?\n/);
+
+  // بلوکِ allowBuilds را پیدا یا می‌سازیم، و ورودی‌های ناتمامِ خودِ pnpm را
+  // («pkg: set this to true or false») به true تبدیل می‌کنیم.
+  const out = [];
+  let inBlock = false;
+  const seen = new Set();
+
+  for (const line of lines) {
+    if (/^allowBuilds:\s*$/.test(line)) { inBlock = true; out.push(line); continue; }
+    if (inBlock) {
+      const m = line.match(/^\s{2}([^\s:]+):\s*(.*)$/);
+      if (m) {
+        seen.add(m[1]);
+        out.push(`  ${m[1]}: true`); // چه true بوده چه یادداشتِ ناتمامِ pnpm
+        continue;
+      }
+      if (line.trim() !== "") inBlock = false;
+    }
+    // بلوکِ منسوخِ نگارشِ قبلیِ خودمان را دور می‌ریزیم
+    if (/^onlyBuiltDependencies:\s*$/.test(line)) { inBlock = "legacy"; continue; }
+    if (inBlock === "legacy") {
+      if (/^\s+-\s+/.test(line) || line.trim() === "") continue;
+      inBlock = false;
+    }
+    out.push(line);
+  }
+
+  const missing = packages.filter((p) => !seen.has(p));
+  let next = out.join("\n").replace(/\n{3,}/g, "\n\n");
+
+  if (missing.length) {
+    if (seen.size > 0) {
+      next = next.replace(/^allowBuilds:\s*$/m, (h) => h + "\n" + missing.map((p) => `  ${p}: true`).join("\n"));
+    } else {
+      const sep = next.endsWith("\n") ? "" : "\n";
+      next += sep + "\n# اجازهٔ اجرای اسکریپتِ بیلد — بی این، pnpm نصب را ناقص می‌گذارد\n" +
+        "allowBuilds:\n" + missing.map((p) => `  ${p}: true`).join("\n") + "\n";
+    }
+  }
+
+  if (next === text) return { changed: false, allowed: packages };
+  writeFileSync(file, next.endsWith("\n") ? next : next + "\n", "utf8");
+  return { changed: true, allowed: packages };
+}
+
 // ---------------------------------------------------------------- پورتِ آزاد
 
 /**
@@ -393,6 +457,59 @@ export async function applyTechnology({
   const performed = [];
 
   for (const step of tech.apply.steps) {
+    if (step.kind === "mkdir") {
+      // بعضی CLIهای رسمی توقع دارند پوشهٔ والد از قبل باشد. مثلاً
+      // `create-next-app apps/web` وقتی apps/ نباشد می‌گوید
+      // «The application path is not writable» — که پیامِ گمراه‌کننده‌ای است
+      // برای «پوشهٔ والد وجود ندارد». (در آزمایشِ زنده گرفته شد.)
+      planned.push({ kind: "mkdir", path: step.path });
+      if (dryRun) continue;
+      mkdirSync(join(projectPath, step.path), { recursive: true });
+      performed.push({ kind: "mkdir", path: step.path });
+      continue;
+    }
+
+    if (step.kind === "writeFile") {
+      planned.push({ kind: "writeFile", path: step.path });
+      if (dryRun) continue;
+      const dest = join(projectPath, step.path);
+      if (existsSync(dest)) {
+        performed.push({ kind: "writeFile", path: step.path, skipped: "از قبل بود، دست نزدم" });
+      } else {
+        mkdirSync(dirname(dest), { recursive: true });
+        writeFileSync(dest, step.content, "utf8");
+        performed.push({ kind: "writeFile", path: step.path, changed: true });
+      }
+      continue;
+    }
+
+    if (step.kind === "pnpmAddDev") {
+      // pnpm ۱۰+ اسکریپتِ بیلدِ پکیج‌ها را بی‌اجازه اجرا نمی‌کند و با
+      // [ERR_PNPM_IGNORED_BUILDS] کدِ خروجِ غیرصفر می‌دهد — یعنی نصب ناقص است.
+      // (nx و cypress هر دو به آن خوردند.) اجازه را از قبل در فایلِ workspace
+      // می‌نویسیم؛ این همان «لایهٔ چسبِ» تصمیمِ ۰۰۰۳ است.
+      if (step.allowBuild?.length && !dryRun) {
+        performed.push({ kind: "allowBuild", ...allowPnpmBuilds(projectPath, step.allowBuild) });
+      }
+      // pnpm سرِ این یک نکته سخت‌گیر است: داخلِ workspace باید «-w» بدهی و
+      // بیرونش نباید. پس فرمان را از رویِ واقعیتِ پوشه می‌سازیم، نه حدسی.
+      //
+      // این تنها شرطِ داخلِ موتور است، و عمداً: مربوط به قلقِ خودِ pnpm است،
+      // نه به یک تکنولوژیِ خاص. وگرنه هر رکوردِ رجیستری باید دو نسخه داشت.
+      const inWorkspace = existsSync(join(projectPath, "pnpm-workspace.yaml"));
+      const flag = inWorkspace ? "-Dw" : "-D";
+      const command = `pnpm add ${flag} ${step.packages.join(" ")}`;
+      planned.push({ kind: "cli", command });
+      if (dryRun) continue;
+      if (!terminal) return { ok: false, error: "ترمینالی برای اجرای فرمان داده نشد." };
+      const res = await terminal.runAndWait(`cd "${projectPath}"; ${command}`);
+      performed.push({ kind: "cli", command, ok: res.ok });
+      if (!res.ok) {
+        return { ok: false, error: `فرمان شکست خورد: ${command}`, steps: performed, hint: "خروجیِ واقعی در ترمینال است." };
+      }
+      continue;
+    }
+
     if (step.kind === "cli") {
       planned.push({ kind: "cli", command: step.command });
       if (dryRun) continue;

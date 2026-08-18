@@ -425,12 +425,15 @@
         const blocked = opt.missingRequirements.length > 0;
 
         const goBtn = el("button", "go", "نصب کن");
-        goBtn.disabled = installed || blocked;
-        goBtn.title = installed ? "از قبل نصب است" : blocked ? "اول پیش‌نیازش را نصب کن" : "";
+        goBtn.disabled = installed || blocked || !termReady;
+        goBtn.title = !termReady
+          ? "تا ترمینال وصل نشود، فرمان اجرا نمی‌شود"
+          : installed ? "از قبل نصب است" : blocked ? "اول پیش‌نیازش را نصب کن" : "";
         goBtn.addEventListener("click", () => decide("apply", path, opt.id, opt.label, goBtn));
 
         const undoBtn = el("button", "undo", "بردار");
-        undoBtn.disabled = !installed;
+        undoBtn.disabled = !installed || !termReady;
+        if (!termReady) undoBtn.title = "تا ترمینال وصل نشود، فرمان اجرا نمی‌شود";
         undoBtn.addEventListener("click", () => decide("revert", path, opt.id, opt.label, undoBtn));
 
         acts.append(goBtn, undoBtn);
@@ -509,10 +512,15 @@
   function setTermStatus(on, label) {
     $("termDot").classList.toggle("on", on);
     $("termLabel").textContent = label;
+    // دکمه‌های اعمال/برگشت تا وصل‌شدنِ ترمینال خاموش می‌مانند: فرمانی که
+    // خروجی‌اش دیده نشود، ناقضِ قاعدهٔ «هیچ چیزی پنهان اجرا نشود» است.
+    // (این را تستِ سرتاسری پیدا کرد: کلیکِ قبل از اتصال، خروجی را می‌بلعید.)
+    if (termReady !== on) { termReady = on; loadDecisions(); }
   }
 
   const pendingSteps = new Map();
   let ws = null;
+  let termReady = false;
 
   function connect() {
     const proto = location.protocol === "https:" ? "wss:" : "ws:";

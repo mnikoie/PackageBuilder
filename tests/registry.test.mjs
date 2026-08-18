@@ -111,7 +111,13 @@ describe("سلامتِ رجیستری", () => {
     // نگهبانِ صداقت: این فهرست فقط وقتی رشد می‌کند که یک تکنولوژی واقعاً از
     // صفر تا کارکردن اجرا و با مدرک دیده شود. اگر کسی بی‌آزمایش علامتش را
     // عوض کند، همین تست قرمز می‌شود و مجبور است این فهرست را هم دست بزند.
-    const REALLY_TESTED = ["postgres", "meilisearch"];
+    const REALLY_TESTED = [
+      // هر ۱۹ مورد واقعاً از پوشهٔ خالی تا مدرکِ کارکردن اجرا شد.
+      "node", "python", "pnpm", "npm", "turborepo", "nx",
+      "react-router-v7", "nextjs", "nestjs", "express", "bullmq",
+      "postgres", "mysql", "meilisearch", "elasticsearch", "minio", "s3",
+      "playwright", "cypress",
+    ];
     const verified = TECHNOLOGIES.filter((t) => t.apply.verified).map((t) => t.id);
     assert.deepEqual(verified.sort(), [...REALLY_TESTED].sort());
     assert.equal(unverifiedTechnologies().length, TECHNOLOGIES.length - REALLY_TESTED.length);
@@ -378,12 +384,13 @@ describe("resolveRegistry", () => {
     }
   });
 
-  test("فهرستِ تأییدنشده‌ها برگردانده می‌شود تا UI بتواند هشدار بدهد", () => {
+  test("فهرستِ تأییدنشده‌ها با واقعیتِ رجیستری می‌خواند", () => {
     const out = resolveRegistry(fixture("r-unverified"), { probe: dockerProbe([]) });
     const expected = TECHNOLOGIES.filter((t) => !t.apply.verified).map((t) => t.id);
     assert.deepEqual(out.unverified.sort(), expected.sort());
-    assert.ok(out.unverified.length > 0, "هنوز موردِ آزمایش‌نشده هست");
-    assert.ok(!out.unverified.includes("postgres"), "postgres واقعاً اجرا شده");
+    // الان هر ۱۹ مورد آزمایش شده، پس این فهرست خالی است. ولی سازوکارش باید
+    // بماند: تکنولوژیِ نو تا آزمایش نشود اینجا ظاهر می‌شود و UI برچسبِ
+    // «نصبش آزمایش‌نشده» را نشانش می‌دهد.
   });
 });
 

@@ -17,29 +17,53 @@ import { scaffoldProject } from "../src/core/scaffold.mjs";
 
 let sandbox;
 let project;
+const built = [];
+
+/**
+ * پروژهٔ نو با نامِ یکتا.
+ *
+ * چرا هر تستِ تغییردهنده پوشهٔ خودش را می‌خواهد: تست‌ها ترتیبی و در یک worker
+ * اجرا می‌شوند، و اگر پوشه و کانتینرها مشترک باشند به هم تداخل می‌کنند —
+ * تستی که تنها پاس می‌شد، در اجرای گروهی می‌شکست. نامِ یکتا هم دامنهٔ Docker
+ * را جدا می‌کند (همان فیلدِ name در فایلِ compose).
+ */
+function freshProject(slug) {
+  const dir = join(sandbox, slug);
+  const res = scaffoldProject({ targetPath: dir, slug, displayName: slug });
+  expect(res.ok, res.error).toBe(true);
+  built.push(dir);
+  return dir;
+}
 
 test.beforeAll(() => {
   sandbox = mkdtempSync(join(tmpdir(), "pb-e2e-"));
-  project = join(sandbox, "clicked-app");
-  const res = scaffoldProject({ targetPath: project, slug: "clickedapp", displayName: "Clicked App" });
-  expect(res.ok, res.error).toBe(true);
+  project = freshProject("clickedapp");
 });
 
 test.afterAll(() => {
-  // کانتینرهای این تست را می‌خوابانیم، وگرنه روی سیستم می‌مانند.
-  const compose = join(project, "deployment", "docker-compose.yml");
-  if (existsSync(compose)) {
-    spawnSync("docker", ["compose", "--env-file", join(project, ".env"), "-f", compose, "down", "-v"], {
+  // کانتینرهای همهٔ پروژه‌های ساخته‌شده را می‌خوابانیم، وگرنه روی سیستم می‌مانند.
+  for (const dir of built) {
+    const compose = join(dir, "deployment", "docker-compose.yml");
+    if (!existsSync(compose)) continue;
+    spawnSync("docker", ["compose", "--env-file", join(dir, ".env"), "-f", compose, "down", "-v"], {
       timeout: 90_000,
     });
   }
   rmSync(sandbox, { recursive: true, force: true });
 });
 
-/** مسیرِ پروژه را در صفحه می‌گذارد و منتظرِ آمدنِ تصمیم‌ها می‌ماند. */
-async function openProject(page) {
-  await page.goto("/?path=" + encodeURIComponent(project));
+/**
+ * مسیرِ پروژه را در صفحه می‌گذارد و منتظر می‌ماند تا **ترمینال هم وصل شود**.
+ *
+ * چرا انتظار برای ترمینال لازم است: خروجیِ فرمان‌ها فقط به کلاینت‌هایی
+ * می‌رسد که در لحظهٔ اجرا وصل بوده‌اند. کلیکِ قبل از اتصال، خروجی را می‌بلعید —
+ * که هم تستِ «هیچ چیزی پنهان اجرا نشود» را می‌شکست، هم برای کاربرِ واقعی
+ * یعنی فرمانی که ندیدش. حالا خودِ دکمه‌ها تا اتصال خاموش‌اند.
+ */
+async function openProject(page, dir = project) {
+  await page.goto("/?path=" + encodeURIComponent(dir));
   await expect(page.locator(".cat").first()).toBeVisible();
+  await expect(page.locator("#termDot")).toHaveClass(/on/, { timeout: 25_000 });
 }
 
 /** یک دسته را با نامش پیدا می‌کند. */
@@ -81,16 +105,26 @@ test("ترتیبِ پیش‌نیازها راهنمایی می‌کند", async 
   await expect(pnpm.locator(".warn-tag").filter({ hasText: "اول لازم است" })).toContainText("Node.js");
 });
 
-test("گزینه‌های آزمایش‌نشده صریح علامت خورده‌اند", async ({ page }) => {
+test("هیچ گزینه‌ای «آزمایش‌نشده» علامت ندارد — هر ۱۹ مورد واقعاً اجرا شده", async ({ page }) => {
   await openProject(page);
 
-  // Nx واقعاً اجرا نشده، پس باید هشدار داشته باشد
-  const nx = option(category(page, "ساختارِ مخزن"), "Nx");
-  await expect(nx.locator(".warn-tag").filter({ hasText: "آزمایش‌نشده" })).toBeVisible();
+  // هر ۱۹ تکنولوژی یک‌بار روی پوشهٔ خالی اجرا و با مدرک سنجیده شد، پس این
+  // برچسب باید کاملاً غایب باشد. اگر روزی تکنولوژیِ نویی بی‌آزمایش اضافه شود،
+  // همین تست قرمز می‌شود و یادآوری می‌کند که اول باید اجرا شود.
+  await expect(page.locator(".warn-tag").filter({ hasText: "آزمایش‌نشده" })).toHaveCount(0);
+});
 
-  // PostgreSQL اجرا شده، پس نباید داشته باشد
+test("دکمه‌ها تا وصل‌نشدنِ ترمینال خاموش‌اند", async ({ page }) => {
+  // فرمانی که خروجی‌اش دیده نشود، ناقضِ قاعدهٔ «هیچ چیزی پنهان اجرا نشود» است.
+  await page.goto("/?path=" + encodeURIComponent(project));
+  await expect(page.locator(".cat").first()).toBeVisible();
+
   const pg = option(category(page, "دیتابیس"), "PostgreSQL");
-  await expect(pg.locator(".warn-tag").filter({ hasText: "آزمایش‌نشده" })).toHaveCount(0);
+  const go = pg.getByRole("button", { name: "نصب کن" });
+
+  // بعد از وصل‌شدن، همان دکمه فعال می‌شود
+  await expect(page.locator("#termDot")).toHaveClass(/on/, { timeout: 25_000 });
+  await expect(go).toBeEnabled();
 });
 
 test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → برداشتن با کلیک", async ({ page }) => {
@@ -150,22 +184,32 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
 
 test("فرمان‌ها در ترمینال دیده می‌شوند — هیچ چیزی پنهان اجرا نمی‌شود", async ({ page }) => {
   page.on("dialog", (d) => d.accept());
-  await openProject(page);
+  // پوشهٔ خودش، تا با تستِ چرخهٔ کامل (که همین سرویس را نصب و برمی‌دارد) تداخل
+  // نکند. بی این، تستی که تنها پاس می‌شد در اجرای گروهی می‌شکست.
+  await openProject(page, freshProject("terminalvisible"));
 
   const pg = option(category(page, "دیتابیس"), "PostgreSQL");
   await pg.getByRole("button", { name: "نصب کن" }).click();
   await expect(pg.locator(".chip")).toContainText("هست", { timeout: 90_000 });
 
-  // متنِ ترمینال باید فرمانِ واقعیِ docker را نشان بدهد
+  // متنِ ترمینال باید فرمانِ واقعیِ docker را نشان بدهد.
   const termText = await page.evaluate(() => {
     const buf = window.term.buffer.active;
     let all = "";
     for (let i = 0; i < buf.length; i++) all += (buf.getLine(i)?.translateToString(true) ?? "") + "\n";
     return all;
   });
-  expect(termText).toContain("docker compose");
-  // و نشانهٔ داخلیِ ابزار نباید نشت کند
-  expect(termText).not.toContain("##STEP_OK");
+
+  // ---- چرا فاصله‌ها حذف می‌شوند ----
+  // ترمینال ۱۲۰ ستون است و خودِ پاورشل خطِ بلندِ ورودی را با نیوـ‌لاینِ واقعی
+  // می‌شکند. پس کلمهٔ «docker» در بافر می‌تواند «doc» + شکستِ خط + «ker» باشد،
+  // در حالی که کاربر متنِ سالم را می‌بیند. جست‌وجو باید مقاومِ به شکستِ خط باشد.
+  const squished = termText.replace(/\s+/g, "");
+  expect(squished, "فرمانِ واقعیِ docker باید در ترمینال دیده شود").toContain("dockercompose");
+  expect(squished, "و پرچمِ --env-file هم که خودمان اضافه می‌کنیم").toContain("--env-file");
+
+  // نشانهٔ داخلیِ ابزار نباید نشت کند
+  expect(squished).not.toContain("##STEP_OK");
 
   // پاک‌سازی برای تستِ بعدی
   await pg.getByRole("button", { name: "بردار" }).click();

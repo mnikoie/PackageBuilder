@@ -130,8 +130,27 @@ export function createSentinelParser(onResult = () => {}) {
  * فرمان فقط `__pbEnd <id> $?` دارد — نه «STEP_OK»، نه «##». پژواک از اساس
  * بی‌خطر می‌شود، و ضمناً خیلی خواناتر است تا یک if/else طولانی روی هر فرمان.
  */
+/**
+ * ---- تلهٔ سوم: `$?` برای فرمان‌های بیرونی دروغ می‌گوید ----
+ * در پاورشل، اگر یک فرمانِ بیرونی چیزی روی stderr بنویسد، `$?` می‌شود
+ * `false` — حتی اگر کدِ خروجش صفر و کارش کاملاً موفق باشد. و pnpm نوارِ
+ * پیشرفتش را روی stderr می‌نویسد.
+ *
+ * نتیجهٔ واقعی: `pnpm add -Dw nx` پکیج را **درست نصب می‌کرد** ولی ابزار
+ * «شکست خورد» گزارش می‌داد. (آینهٔ باگِ پژواک: آن موفقیتِ دروغ می‌داد، این
+ * شکستِ دروغ.)
+ *
+ * راه‌حل — تفکیکِ فرمانِ بیرونی از cmdlet:
+ * قبلِ اجرا `$LASTEXITCODE` را روی یک عددِ نشانه (۹۹۹) می‌گذاریم.
+ *   • اگر بعدش همان ۹۹۹ ماند → فرمان یک cmdlet بود و کدِ خروج ندارد، پس
+ *     `$?` معیارِ درست است.
+ *   • اگر عوض شد → فرمانِ بیرونی بود، و تنها معیارِ درست کدِ خروج است.
+ */
+const SENTINEL_PROBE = 999;
+
 export const SETUP_COMMAND =
-  'function __pbEnd { param($id, $ok) ' +
+  "function __pbEnd { param($id, $success, $code) " +
+  `$ok = if ($code -eq ${SENTINEL_PROBE}) { $success } else { $code -eq 0 }; ` +
   'Write-Host ("#"*2 + "STEP_" + $(if ($ok) { "OK" } else { "FAIL" }) + ":" + $id + "#"*2) }';
 
 /**
@@ -147,5 +166,17 @@ export function withSentinel(command, stepId) {
   if (!/^[A-Za-z0-9_-]{1,64}$/.test(stepId)) {
     throw new Error(`شناسهٔ مرحله نامعتبر است: ${stepId}`);
   }
-  return `${command}; __pbEnd ${stepId} $?`;
+  // عددِ نشانه قبل، و هر دو معیار بعد — تا __pbEnd بتواند تشخیص بدهد فرمان
+  // بیرونی بوده یا cmdlet. شرحش بالای SETUP_COMMAND.
+  //
+  // ---- تلهٔ چهارم: خطای قطع‌کننده ----
+  // یک خطای terminating در پاورشل (مثلاً `-ErrorAction Stop`) بقیهٔ همان خط را
+  // رد می‌کند — پس `__pbEnd` هرگز اجرا نمی‌شد و وضعیت **برای همیشه** روی
+  // «در حالِ اجرا» گیر می‌کرد. با try/catch تضمین می‌کنیم خبر در هر دو حالت
+  // برسد؛ شکستِ اعلام‌شده بی‌نهایت بهتر از سکوت است.
+  return (
+    `$global:LASTEXITCODE = ${SENTINEL_PROBE}; ` +
+    `try { ${command}; __pbEnd ${stepId} $? $LASTEXITCODE } ` +
+    `catch { __pbEnd ${stepId} $false 1 }`
+  );
 }

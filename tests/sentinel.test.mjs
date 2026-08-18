@@ -180,16 +180,29 @@ describe("تجزیه‌گر — مقاومت", () => {
 });
 
 describe("withSentinel", () => {
-  test("سنتینل را با «;» به همان خط می‌چسباند، نه خطِ جدا", () => {
+  test("همه در یک خط می‌ماند، بدونِ خطِ جدید", () => {
     const cmd = withSentinel("pnpm install", "abc123");
-    assert.equal(cmd, "pnpm install; __pbEnd abc123 $?");
     assert.ok(!cmd.includes("\n"), "نباید خطِ جدید بسازد");
+    assert.ok(cmd.includes("pnpm install"), "خودِ فرمان باید داخلش باشد");
+    assert.ok(cmd.includes("__pbEnd abc123"), "اعلامِ پایان باید شناسه را داشته باشد");
   });
 
-  test("خطِ فرمان کوتاه و خوانا می‌ماند", () => {
-    // قبلاً یک if/else طولانی روی هر فرمان پژواک می‌شد و زشت بود.
-    const suffix = withSentinel("x", "id1").slice(1);
-    assert.ok(suffix.length < 30, `پسوند باید کوتاه باشد، ولی «${suffix}» است`);
+  test("هر دو معیارِ موفقیت فرستاده می‌شوند — نه فقط $?", () => {
+    // `$?` برای فرمانِ بیرونی‌ای که روی stderr می‌نویسد دروغ می‌گوید (مثلِ pnpm
+    // که نوارِ پیشرفتش را روی stderr می‌نویسد). پس کدِ خروج هم فرستاده می‌شود
+    // و __pbEnd تفکیک می‌کند که فرمان بیرونی بوده یا cmdlet.
+    const cmd = withSentinel("pnpm add x", "id1");
+    assert.ok(cmd.includes("$?"), "معیارِ cmdlet");
+    assert.ok(cmd.includes("$LASTEXITCODE"), "معیارِ فرمانِ بیرونی");
+    assert.match(cmd, /LASTEXITCODE = 999/, "عددِ نشانه باید قبلِ اجرا ست شود");
+  });
+
+  test("خطای قطع‌کننده هم خبرِ شکست می‌دهد — سکوت نمی‌کند", () => {
+    // بدونِ try/catch، خطای terminating بقیهٔ خط را رد می‌کرد و سنتینل هرگز
+    // اجرا نمی‌شد؛ نتیجه‌اش گیرکردنِ ابدیِ وضعیت بود.
+    const cmd = withSentinel("Get-Item nope -ErrorAction Stop", "id2");
+    assert.ok(cmd.includes("try {"), "باید داخلِ try باشد");
+    assert.match(cmd, /catch \{ __pbEnd id2 \$false 1 \}/, "شاخهٔ catch باید شکست را اعلام کند");
   });
 
   test("تابعِ آماده‌سازی، نشانه را در زمانِ اجرا سرِهم می‌کند", () => {

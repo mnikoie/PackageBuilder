@@ -112,6 +112,33 @@ describe("ترمینالِ واقعی", { skip: SHELL ? false : "پاورشل ن
     assert.equal(mine[0].ok, false, "شکست باید شکست گزارش شود، نه موفقیت");
   });
 
+  test("فرمانِ موفقی که روی stderr می‌نویسد، شکست حساب نمی‌شود", async () => {
+    // رگرسیونِ باگی که در آزمایشِ ۱۷ تکنولوژی پیدا شد: در پاورشل، `$?` برای
+    // فرمانِ بیرونی که روی stderr بنویسد `false` می‌شود، حتی با کدِ خروجِ صفر.
+    // pnpm نوارِ پیشرفتش را روی stderr می‌نویسد، پس نصبِ **موفق** «شکست»
+    // گزارش می‌شد. حالا کدِ خروج معیار است.
+    term.run('cmd /c "echo روی-خطا 1>&2 & exit 0"', "stderrok");
+    await waitFor(() => steps.some((s) => s.id === "stderrok"), 25000, "پایانِ stderrok");
+    assert.equal(
+      steps.find((s) => s.id === "stderrok").ok,
+      true,
+      "کدِ خروج صفر بوده، پس باید موفق باشد — نوشتن روی stderr شکست نیست",
+    );
+  });
+
+  test("cmdletِ شکست‌خورده هم شکست حساب می‌شود", async () => {
+    // طرفِ دیگرِ همان تفکیک: cmdlet کدِ خروج ندارد، پس معیارش `$?` است.
+    term.run("Get-Item 'C:\\این-فایل-وجود-ندارد-۹۹۹' -ErrorAction Stop", "cmdletfail");
+    await waitFor(() => steps.some((s) => s.id === "cmdletfail"), 25000, "پایانِ cmdletfail");
+    assert.equal(steps.find((s) => s.id === "cmdletfail").ok, false);
+  });
+
+  test("cmdletِ موفق درست تشخیص داده می‌شود", async () => {
+    term.run("Get-Location", "cmdletok");
+    await waitFor(() => steps.some((s) => s.id === "cmdletok"), 25000, "پایانِ cmdletok");
+    assert.equal(steps.find((s) => s.id === "cmdletok").ok, true);
+  });
+
   test("فرمانِ ناموجود هم شکست حساب می‌شود", async () => {
     term.run("این-فرمان-وجود-ندارد-۱۲۳", "fail2");
     await waitFor(() => steps.some((s) => s.id === "fail2"), 25000, "پایانِ fail2");
