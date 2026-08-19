@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
 
 import { scaffoldProject } from "../src/core/scaffold.mjs";
+import { unverifiedTechnologies } from "../src/core/registry.mjs";
 
 let sandbox;
 let project;
@@ -105,13 +106,19 @@ test("ترتیبِ پیش‌نیازها راهنمایی می‌کند", async 
   await expect(pnpm.locator(".warn-tag").filter({ hasText: "اول لازم است" })).toContainText("Node.js");
 });
 
-test("هیچ گزینه‌ای «آزمایش‌نشده» علامت ندارد — هر ۲۸ مورد واقعاً اجرا شده", async ({ page }) => {
+test("برچسبِ «آزمایش‌نشده» دقیقاً به همان‌هایی می‌خورد که واقعاً اجرا نشده‌اند", async ({ page }) => {
   await openProject(page);
 
-  // هر ۲۸ تکنولوژی یک‌بار روی پوشهٔ خالی اجرا و با مدرک سنجیده شد، پس این
-  // برچسب باید کاملاً غایب باشد. اگر روزی تکنولوژیِ نویی بی‌آزمایش اضافه شود،
-  // همین تست قرمز می‌شود و یادآوری می‌کند که اول باید اجرا شود.
-  await expect(page.locator(".warn-tag").filter({ hasText: "آزمایش‌نشده" })).toHaveCount(0);
+  // نگارشِ قبلیِ این تست انتظار داشت این برچسب **هیچ‌جا** نباشد، چون آن موقع
+  // همهٔ ردیف‌ها اجرا شده بودند. حالا دو تا هستند که روی این سیستم اجرا
+  // نشدند (Docker بالا نیامد)، و پنهان‌کردنشان یعنی همان سبزِ دروغینی که این
+  // پروژه علیه آن نوشته شده.
+  //
+  // پس تست از خودِ رجیستری می‌پرسد چند تا هنوز اجرا نشده‌اند و همان تعداد را
+  // در صفحه انتظار دارد: نه کمتر (پنهان‌کاری)، نه بیشتر (برچسبِ بی‌جا). فهرستِ
+  // دقیقشان در tests/registry.test.mjs میخ شده است.
+  const pending = unverifiedTechnologies().length;
+  await expect(page.locator(".warn-tag").filter({ hasText: "آزمایش‌نشده" })).toHaveCount(pending);
 });
 
 test("دکمه‌ها تا وصل‌نشدنِ ترمینال خاموش‌اند", async ({ page }) => {

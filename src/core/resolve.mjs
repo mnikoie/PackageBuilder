@@ -19,7 +19,7 @@ import { join } from "node:path";
 
 import {
   PRESENT, ABSENT, UNKNOWN,
-  detectNpmPackage, detectNodeModules, detectPythonVenv, detectMonorepoTool,
+  detectNpmPackage, detectNodeModules, detectPythonVenv, detectPythonPackage, detectMonorepoTool,
 } from "./detect.mjs";
 import { CATEGORIES, TECHNOLOGIES } from "./registry.mjs";
 
@@ -105,6 +105,9 @@ export function evaluateDetect(projectPath, spec, ctx = {}) {
 
     case "pythonVenv":
       return detectPythonVenv(projectPath, resolveRole(projectPath, spec.role).app);
+
+    case "pythonPackage":
+      return detectPythonPackage(projectPath, resolveRole(projectPath, spec.role).app, spec.name);
 
     case "dockerService": {
       // بی‌خبری از Docker یعنی «نامعلوم»، نه «نصب نیست».

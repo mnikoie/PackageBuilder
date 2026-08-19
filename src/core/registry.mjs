@@ -238,11 +238,156 @@ const GRAPHQL_SERVER = [
 ].join("\n");
 
 /** کمترین appِ ممکن برای api — وقتی هنوز فریم‌ورکِ بک‌اندی انتخاب نشده. */
+const NODE_AI_APP = minimalApp("ai-service", "src/main.js", [
+  "// سرویسِ AI روی Node. کلید را از env بخوان، هرگز در کد ننویس.",
+  "//",
+  "// کلاینت عمداً تنبل ساخته می‌شود: خودِ کتابخانه اگر کلید نداشته باشد همان",
+  "// لحظهٔ ساخت خطا می‌دهد، و ساختنش در بالای فایل یعنی سرویس بی‌کلید اصلاً",
+  "// بالا نمی‌آید. در اجرای واقعی دیده شد.",
+  'import OpenAI from "openai";',
+  "",
+  'const apiKey = process.env.OPENAI_API_KEY ?? "";',
+  "",
+  "export function client() {",
+  "  if (!apiKey) {",
+  '    throw new Error("OPENAI_API_KEY تنظیم نشده. در فایلِ .env بگذارش.");',
+  "  }",
+  "  return new OpenAI({ apiKey });",
+  "}",
+  "",
+  'console.log("سرویسِ AI آماده است. کلید:", apiKey ? "هست" : "هنوز تنظیم نشده");',
+  "",
+]);
+
 const BARE_API_APP = minimalApp("api", "src/main.js", [
   '// این فایل جای‌نگه‌دار است. با انتخابِ فریم‌ورکِ بک‌اند، جایش را می‌گیرد.',
   'console.log("apps/api آماده است.");',
   "",
 ]);
+
+/** ورودیِ CSS برای Tailwind ۴ — یک خط import کافی است. */
+const TAILWIND_CSS = [
+  "/* Tailwind نگارشِ ۴: همه‌چیز با همین یک خط می‌آید. */",
+  '@import "tailwindcss";',
+  "",
+  "/* استایلِ خودت را از اینجا به بعد بنویس. */",
+  "",
+].join("\n");
+
+/** سرویسِ FastAPI — کوچک ولی واقعاً اجراشدنی. */
+const FASTAPI_MAIN = [
+  "from fastapi import FastAPI",
+  "",
+  'app = FastAPI(title="سرویسِ پردازشِ فارسی")',
+  "",
+  "",
+  '@app.get("/health")',
+  "def health():",
+  '    return {"ok": True}',
+  "",
+  "",
+  '@app.get("/normalize")',
+  "def normalize(text: str):",
+  '    """نمونهٔ ساده: یکدست‌کردنِ «ی» و «ک»‌ِ عربی به فارسی."""',
+  '    return {"text": text.replace("ي", "ی").replace("ك", "ک")}',
+  "",
+].join("\n");
+
+const FASTAPI_REQUIREMENTS = [
+  "fastapi",
+  "uvicorn[standard]",
+  "",
+].join("\n");
+
+/** کارگرِ Celery — با یک کارِ نمونه که واقعاً صدا زده می‌شود. */
+const CELERY_TASKS = [
+  "import os",
+  "",
+  "from celery import Celery",
+  "",
+  'broker = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")',
+  'app = Celery("worker", broker=broker, backend=broker)',
+  "",
+  "",
+  "@app.task",
+  "def add(x, y):",
+  '    """کارِ نمونه. کارهای واقعیِ خودت را کنارش بنویس."""',
+  "    return x + y",
+  "",
+].join("\n");
+
+const CELERY_REQUIREMENTS = [
+  "celery",
+  "redis",
+  "",
+].join("\n");
+
+/** لاگرِ pino با تنظیماتِ عاقلانه — و بدونِ ادعای «Sentry وصل است». */
+const PINO_LOGGER = [
+  "// لاگرِ مشترکِ برنامه.",
+  "//",
+  "// دو نکته که در تولید مهم‌اند:",
+  "//  - سطحِ لاگ از env می‌آید تا بی تغییرِ کد قابلِ تنظیم باشد.",
+  "//  - داده‌های حساس (رمز، توکن، کوکی) پیش از نوشتن پنهان می‌شوند.",
+  'import pino from "pino";',
+  "",
+  "export const logger = pino({",
+  '  level: process.env.LOG_LEVEL ?? "info",',
+  "  redact: {",
+  '    paths: ["password", "token", "authorization", "cookie", "*.password", "*.token"],',
+  '    censor: "[پنهان‌شده]",',
+  "  },",
+  "});",
+  "",
+].join("\n");
+
+/**
+ * راه‌اندازیِ Sentry.
+ *
+ * عمداً بی DSN هیچ کاری نمی‌کند و صریح می‌گوید خاموش است — ابزارِ خطایابی‌ای
+ * که خودش بی‌صدا شکست بخورد، بدترین نوعِ ابزار است.
+ */
+const SENTRY_INIT = [
+  "// گزارشِ خطا به Sentry.",
+  "//",
+  "// بی SENTRY_DSN این فایل عمداً کاری نمی‌کند و می‌گوید خاموش است. DSN را از",
+  "// داشبوردِ خودت بردار و در .env بگذار.",
+  'import * as Sentry from "@sentry/node";',
+  "",
+  'const dsn = process.env.SENTRY_DSN ?? "";',
+  "",
+  "export const sentryEnabled = Boolean(dsn);",
+  "",
+  "if (sentryEnabled) {",
+  "  Sentry.init({",
+  "    dsn,",
+  '    environment: process.env.NODE_ENV ?? "development",',
+  "    tracesSampleRate: Number(process.env.SENTRY_TRACES_SAMPLE_RATE ?? 0),",
+  "  });",
+  "} else {",
+  '  console.warn("SENTRY_DSN تنظیم نشده — گزارشِ خطا خاموش است.");',
+  "}",
+  "",
+  "export { Sentry };",
+  "",
+].join("\n");
+
+/** کانفیگِ Prometheus برای پشتهٔ خودمیزبان. */
+const PROMETHEUS_YML = [
+  "global:",
+  "  scrape_interval: 15s",
+  "",
+  "scrape_configs:",
+  "  - job_name: prometheus",
+  "    static_configs:",
+  '      - targets: ["localhost:9090"]',
+  "",
+  "  # سرویسِ خودت را اینجا اضافه کن. مثال:",
+  "  # - job_name: api",
+  "  #   static_configs:",
+  '  #     - targets: ["host.docker.internal:4000"]',
+  "",
+].join("\n");
 
 const WORKER_APP = minimalApp("worker", "src/main.js", [
   'import { Worker } from "bullmq";',
@@ -292,6 +437,17 @@ export const CATEGORIES = [
     requiresCategory: "packageManager",
   },
   {
+    id: "styling",
+    label: "استایل",
+    question: "ظاهرِ برنامه چطور نوشته شود؟",
+    requiresCategory: "packageManager",
+  },
+  {
+    id: "aiService",
+    label: "سرویسِ AI / پردازشِ فارسی",
+    question: "پردازشِ متنِ فارسی و کارهای AI کجا انجام شود؟",
+  },
+  {
     id: "backgroundJobs",
     label: "پردازشِ پس‌زمینه",
     question: "کارهای طولانی چطور از درخواستِ کاربر جدا شوند؟",
@@ -305,6 +461,17 @@ export const CATEGORIES = [
     label: "سبکِ API",
     question: "برنامه و سرور با چه قراردادی حرف بزنند؟",
     requiresCategory: "packageManager",
+  },
+  {
+    id: "auth",
+    label: "احرازِ هویت",
+    question: "کاربر چطور وارد شود؟",
+    requiresCategory: "packageManager",
+  },
+  {
+    id: "observability",
+    label: "خطایابی و مانیتورینگ",
+    question: "وقتی چیزی خراب شد، از کجا می‌فهمی؟",
   },
   {
     id: "e2e",
@@ -617,6 +784,32 @@ export const TECHNOLOGIES = [
       cons: ["به Redis نیاز دارد", "فقط در دنیای Node"],
     },
   },
+  {
+    id: "celery",
+    category: "backgroundJobs",
+    label: "Celery",
+    // مثلِ FastAPI: به تصمیمِ زبانِ پروژه کار ندارد، محیطِ خودش را می‌سازد.
+
+    detect: { kind: "pythonPackage", role: "worker-py", name: "celery" },
+    apply: {
+      verified: false,
+      steps: [
+        { kind: "mkdir", path: "apps/worker-py" },
+        { kind: "writeFile", path: "apps/worker-py/requirements.txt", content: CELERY_REQUIREMENTS },
+        { kind: "writeFile", path: "apps/worker-py/tasks.py", content: CELERY_TASKS },
+        { kind: "cli", command: "python -m venv apps/worker-py/.venv" },
+        { kind: "cli", command: "apps/worker-py/.venv/Scripts/python -m pip install -r apps/worker-py/requirements.txt" },
+        { kind: "env", vars: { CELERY_BROKER_URL: "redis://localhost:6379/0" } },
+        // مثلِ BullMQ، بروکرش را هم خودش می‌آورد — وگرنه «نصب شد» یعنی چیزی
+        // که اجرا نمی‌شود.
+        { kind: "composeService", service: "redis", image: "redis:7-alpine", ports: [{ container: 6379, host: 6379, env: "REDIS_PORT" }], volume: "/data" },
+      ],
+    },
+    meta: {
+      pros: ["استانداردِ دنیای پایتون برای کارِ پس‌زمینه", "زمان‌بندی و تلاشِ مجدد و مسیریابیِ صف در خودش دارد", "کنارِ سرویسِ AI هم‌زبان است"],
+      cons: ["روی ویندوز باید با pool=solo اجرا شود", "به بروکر (Redis) نیاز دارد"],
+    },
+  },
 
   // ------------------------------------------------------------ دیتابیس
   {
@@ -735,6 +928,199 @@ export const TECHNOLOGIES = [
     meta: {
       pros: ["هیچ سروری لازم ندارد — یک فایل است", "برای پروژهٔ کوچک و تستِ محلی سریع‌ترین راه", "پشتیبان‌گیری یعنی کپیِ یک فایل"],
       cons: ["برای نوشتنِ همزمانِ چند کاربر ساخته نشده", "روی چند سرور اصلاً کار نمی‌کند"],
+    },
+  },
+
+  // ------------------------------------------------------------- استایل
+  {
+    id: "tailwind",
+    category: "styling",
+    label: "Tailwind CSS",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "web", name: "tailwindcss" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "mkdir", path: "apps/web/src" },
+        // نامِ فایل عمداً tailwind.css است نه app.css: قالبِ Vite فایلِ App.css
+        // دارد و ویندوز این دو را یکی می‌بیند، پس فایلِ ما هرگز نوشته نمی‌شد
+        // و Tailwind بی‌آنکه کسی بفهمد وصل نمی‌شد. در اجرای واقعی دیده شد.
+        { kind: "writeFile", path: "apps/web/src/tailwind.css", content: TAILWIND_CSS },
+        // @tailwindcss/cli عمداً هست: با آن، درستیِ نصب مستقلِ از باندلر
+        // قابلِ سنجش است. وصل‌کردنِ Tailwind به باندلر بستگی به فریم‌ورکِ
+        // انتخابیِ تو دارد و یک خط است — در سندِ تصمیم نوشته می‌شود.
+        { kind: "cli", command: "pnpm --filter web add -D tailwindcss @tailwindcss/cli" },
+      ],
+    },
+    meta: {
+      pros: ["استایل کنارِ خودِ المان می‌ماند، دنبالِ فایلِ CSS نمی‌گردی", "خروجی فقط شاملِ کلاس‌های استفاده‌شده است", "طراحیِ یکدست بی نظمِ دستی"],
+      cons: ["کلاس‌ها HTML را شلوغ می‌کنند", "برای تیمی که CSS بلد است، یک زبانِ نو برای یادگیری"],
+    },
+  },
+
+  // ------------------------------------------ سرویسِ AI / پردازشِ فارسی
+  {
+    id: "fastapi",
+    category: "aiService",
+    label: "Python + FastAPI",
+    // عمداً requires ندارد: دستهٔ «زبان» تک‌انتخابی است و اگر اینجا python را
+    // پیش‌نیاز کنیم، پروژه‌ای که بک‌اندش Node است هرگز نمی‌تواند سرویسِ AIِ
+    // پایتونی داشته باشد — یعنی دقیقاً همان چیزی که این دسته برایش هست. این
+    // سرویس محیطِ مجازیِ خودش را می‌سازد و به تصمیمِ زبانِ پروژه کار ندارد.
+    // (پایتون باید روی سیستم نصب باشد؛ اگر نباشد، خطای واقعی در ترمینال دیده
+    // می‌شود — همان قاعدهٔ «هیچ چیزی پنهان اجرا نشود».)
+    // مدرک، نصبِ واقعی در venv است — نه نامِ fastapi در requirements.txt.
+    detect: { kind: "pythonPackage", role: "ai-service", name: "fastapi" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "mkdir", path: "apps/ai-service" },
+        { kind: "writeFile", path: "apps/ai-service/requirements.txt", content: FASTAPI_REQUIREMENTS },
+        { kind: "writeFile", path: "apps/ai-service/main.py", content: FASTAPI_MAIN },
+        { kind: "cli", command: "python -m venv apps/ai-service/.venv" },
+        { kind: "cli", command: "apps/ai-service/.venv/Scripts/python -m pip install -r apps/ai-service/requirements.txt" },
+        { kind: "env", vars: { AI_SERVICE_PORT: "8000" } },
+      ],
+    },
+    meta: {
+      pros: ["کتابخانه‌های پردازشِ زبانِ فارسی (Hazm، ParsBERT) اینجا زندگی می‌کنند", "سندِ خودکارِ API", "سریع و async"],
+      cons: ["یک زبانِ دوم در پروژه یعنی دو محیطِ نصب", "استقرارش از سرویسِ Node جداست"],
+    },
+  },
+  {
+    id: "node-ai-service",
+    category: "aiService",
+    label: "Node.js (همان زبانِ بک‌اند)",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "ai-service", name: "openai" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/ai-service/package.json", content: NODE_AI_APP.pkg },
+        { kind: "writeFile", path: "apps/ai-service/src/main.js", content: NODE_AI_APP.code },
+        { kind: "cli", command: "pnpm --filter ai-service add openai" },
+        { kind: "env", vars: { AI_SERVICE_PORT: "8000", OPENAI_API_KEY: "" } },
+      ],
+    },
+    meta: {
+      pros: ["یک زبان برای کلِ پروژه — یک محیطِ نصب و یک زنجیرهٔ استقرار", "اشتراکِ کد و نوع با بک‌اند"],
+      cons: ["کتابخانه‌های پردازشِ زبانِ فارسی در پایتون خیلی قوی‌ترند", "برای کارِ سنگینِ عددی مناسب نیست"],
+    },
+  },
+  // -------------------------------------------------------- احرازِ هویت
+  //
+  // مرزِ صداقت برای این دسته: چیزی که این ابزار می‌تواند ثابت کند، «پکیج نصب
+  // شد و کدِ راه‌اندازی نوشته شد» است. «ورود واقعاً کار می‌کند» به حسابِ
+  // کاربری و کلیدِ خودت نیاز دارد و اینجا ادعا نمی‌شود.
+  {
+    id: "clerk",
+    category: "auth",
+    label: "Clerk",
+    requires: ["pnpm"],
+    // بستهٔ عمومیِ React نصب می‌شود نه بستهٔ Next: این ابزار سه فرانتِ مختلف
+    // دارد و @clerk/nextjs یکی از آنها را تحمیل می‌کرد. تشخیص هر دو را قبول
+    // می‌کند، چون پروژه‌ای که با Next ساخته شده ممکن است بستهٔ Next را داشته باشد.
+    detect: {
+      kind: "any",
+      of: [
+        { kind: "npm", role: "web", name: "@clerk/clerk-react" },
+        { kind: "npm", role: "web", name: "@clerk/nextjs" },
+      ],
+    },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "cli", command: "pnpm --filter web add @clerk/clerk-react" },
+        { kind: "env", vars: { VITE_CLERK_PUBLISHABLE_KEY: "", CLERK_SECRET_KEY: "" } },
+      ],
+    },
+    meta: {
+      pros: ["سریع‌ترین راه: صفحهٔ ورود و ثبت‌نام آماده است", "ورود با گوگل و مانندش بی دردسر", "مدیریتِ کاربر داشبوردِ آماده دارد"],
+      cons: ["سرویسِ ابریِ پولی — دادهٔ کاربر دستِ سرویسِ دیگری است", "برای Next.js ساخته شده؛ با فریم‌ورکِ دیگر کارِ بیشتری دارد", "بی کلیدِ حسابِ خودت کار نمی‌کند"],
+    },
+  },
+  {
+    id: "authjs",
+    category: "auth",
+    label: "Auth.js (NextAuth)",
+    // next-auth بدونِ Next.js واقعاً کار نمی‌کند (به مسیرهای API و میان‌افزارِ
+    // خودِ Next تکیه دارد). پس صریح پیش‌نیازش می‌شود، نه اینکه نصب شود و
+    // بعد کاربر بفهمد بی‌فایده است.
+    requires: ["nextjs"],
+    detect: { kind: "npm", role: "web", name: "next-auth" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "cli", command: "pnpm --filter web add next-auth" },
+        { kind: "env", vars: { AUTH_SECRET: "", AUTH_URL: "http://localhost:3000" } },
+      ],
+    },
+    meta: {
+      pros: ["متن‌باز و روی سرورِ خودت — دادهٔ کاربر پیشِ خودت می‌ماند", "ده‌ها ارائه‌دهندهٔ آماده", "هزینهٔ ماهانه ندارد"],
+      cons: ["صفحه‌های ورود و مدیریتِ کاربر را خودت باید بسازی", "تنظیماتش از سرویسِ آماده پیچیده‌تر است"],
+    },
+  },
+
+  // ------------------------------------------------ خطایابی و مانیتورینگ
+  {
+    id: "sentry-pino",
+    category: "observability",
+    label: "Sentry + pino",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "api", name: "pino" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/src/logger.js", content: PINO_LOGGER },
+        { kind: "writeFile", path: "apps/api/src/sentry.js", content: SENTRY_INIT },
+        { kind: "cli", command: "pnpm --filter api add pino @sentry/node" },
+        { kind: "env", vars: { LOG_LEVEL: "info", SENTRY_DSN: "" } },
+      ],
+    },
+    meta: {
+      pros: ["راه‌اندازیِ چنددقیقه‌ای", "خطاها با کدِ دقیق و کاربرِ مربوطه گروه‌بندی می‌شوند", "لاگِ ساخت‌یافتهٔ سریع با pino"],
+      cons: ["گزارشِ خطا به سرویسِ ابریِ دیگری می‌رود", "بی DSN خاموش است — کلید را خودت باید بگیری", "در حجمِ بالا پولی می‌شود"],
+    },
+  },
+  {
+    id: "grafana-stack",
+    category: "observability",
+    label: "خودمیزبان (Grafana + Loki + Prometheus)",
+    detect: { kind: "dockerService", service: "grafana" },
+    apply: {
+      verified: false,
+      steps: [
+        { kind: "mkdir", path: "deployment" },
+        { kind: "writeFile", path: "deployment/prometheus.yml", content: PROMETHEUS_YML },
+        {
+          kind: "composeService", service: "prometheus", image: "prom/prometheus:v3.1.0",
+          ports: [{ container: 9090, host: 9090, env: "PROMETHEUS_PORT" }],
+          volume: "/prometheus",
+        },
+        {
+          kind: "composeService", service: "loki", image: "grafana/loki:3.3.2",
+          ports: [{ container: 3100, host: 3100, env: "LOKI_PORT" }],
+          command: "-config.file=/etc/loki/local-config.yaml",
+          volume: "/loki",
+        },
+        {
+          kind: "composeService", service: "grafana", image: "grafana/grafana:11.5.1",
+          ports: [{ container: 3000, host: 3000, env: "GRAFANA_PORT" }],
+          environment: { GF_SECURITY_ADMIN_PASSWORD: "change-me", GF_USERS_ALLOW_SIGN_UP: '"false"' },
+          volume: "/var/lib/grafana",
+        },
+        { kind: "env", vars: { GRAFANA_ADMIN_PASSWORD: "change-me" } },
+      ],
+    },
+    meta: {
+      pros: ["همه‌چیز روی سرورِ خودت — هیچ داده‌ای بیرون نمی‌رود", "هزینهٔ ماهانه ندارد", "نمودار و هشدار و لاگ در یک جا"],
+      cons: ["سه سرویسِ اضافه که خودت باید نگه‌داری‌شان کنی", "حافظه و دیسکِ بیشتری می‌خواهد", "راه‌اندازیِ اولش وقت می‌برد"],
     },
   },
 
@@ -983,6 +1369,22 @@ export const REMOVALS = {
   },
   fastify: { steps: [{ kind: "cli", command: "pnpm --filter api remove fastify" }] },
   bullmq: { steps: [{ kind: "cli", command: "pnpm --filter worker remove bullmq ioredis" }] },
+  celery: {
+    steps: [
+      { kind: "cli", command: "apps/worker-py/.venv/Scripts/python -m pip uninstall -y celery" },
+      { kind: "composeDown", service: "redis" },
+    ],
+    manual: "پوشهٔ apps/worker-py و محیطِ مجازی‌اش می‌ماند — کدِ کارگرت آنجاست. خودت تصمیم بگیر.",
+  },
+  tailwind: { steps: [{ kind: "cli", command: "pnpm --filter web remove tailwindcss @tailwindcss/cli" }] },
+  // پکیج برداشته می‌شود (همان چیزی که مدرکِ نصب بود)، ولی کدِ خودت می‌ماند.
+  // اگر فقط manual می‌گذاشتیم، مدرک سرِ جایش می‌ماند و این دسته برای همیشه
+  // قفل می‌شد — یعنی نقضِ قاعدهٔ «هر کاری دو طرفه». در اجرای واقعی دیده شد.
+  fastapi: {
+    steps: [{ kind: "cli", command: "apps/ai-service/.venv/Scripts/python -m pip uninstall -y fastapi uvicorn" }],
+    manual: "پوشهٔ apps/ai-service و main.py و venvاش دست‌نخورده ماندند — کدت آنجاست.",
+  },
+  "node-ai-service": { steps: [{ kind: "cli", command: "pnpm --filter ai-service remove openai" }] },
 
   // سرویس‌های Docker: اول خوابانده می‌شوند، بعد از فایلِ compose حذف می‌شوند
   // (چون آن فایل از رویِ تصمیم‌ها از نو ساخته می‌شود).
@@ -1001,6 +1403,25 @@ export const REMOVALS = {
   minio: { steps: [{ kind: "composeDown", service: "minio" }] },
   s3: { steps: [] }, // فقط متغیرِ env بود، و آن خودش برداشته می‌شود
 
+  clerk: { steps: [{ kind: "cli", command: "pnpm --filter web remove @clerk/clerk-react" }] },
+  authjs: { steps: [{ kind: "cli", command: "pnpm --filter web remove next-auth" }] },
+
+  "sentry-pino": {
+    steps: [
+      { kind: "cli", command: "pnpm --filter api remove pino @sentry/node" },
+      { kind: "deleteFile", path: "apps/api/src/logger.js" },
+      { kind: "deleteFile", path: "apps/api/src/sentry.js" },
+    ],
+  },
+  "grafana-stack": {
+    steps: [
+      { kind: "composeDown", service: "grafana" },
+      { kind: "composeDown", service: "loki" },
+      { kind: "composeDown", service: "prometheus" },
+      { kind: "deleteFile", path: "deployment/prometheus.yml" },
+    ],
+  },
+
   playwright: { steps: [{ kind: "cli", command: "pnpm remove -D @playwright/test" }] },
   cypress: { steps: [{ kind: "cli", command: "pnpm remove -D cypress" }] },
 };
@@ -1014,7 +1435,7 @@ export const manualRemovalTechnologies = () =>
 // ---------------------------------------------------------------- اعتبارسنجی
 
 const DETECT_KINDS = new Set([
-  "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "envVar",
+  "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "pythonPackage", "envVar",
   "pnpmWorkspacePackages", "all", "any",
 ]);
 const APPLY_KINDS = new Set(["cli", "env", "file", "composeService", "writeFile", "pnpmWorkspace", "pnpmAddDev", "pnpmAdd", "mkdir"]);
@@ -1121,6 +1542,8 @@ function validateDetectSpec(techId, spec, depth = 0) {
     }
   } else if (spec.kind === "file" && !spec.path) {
     problems.push(`${techId}: تشخیصِ file بدونِ path`);
+  } else if (spec.kind === "pythonPackage" && !spec.name) {
+    problems.push(`${techId}: مدرکِ pythonPackage بدونِ name`);
   } else if ((spec.kind === "npm" || spec.kind === "npmRoot") && !spec.name) {
     problems.push(`${techId}: تشخیصِ ${spec.kind} بدونِ name`);
   } else if (spec.kind === "dockerService" && !spec.service) {

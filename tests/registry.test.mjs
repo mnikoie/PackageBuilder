@@ -114,7 +114,10 @@ describe("سلامتِ رجیستری", () => {
     const REALLY_TESTED = [
       // هر ۲۸ مورد واقعاً از پوشهٔ خالی تا مدرکِ کارکردن اجرا شد.
       "node", "python", "pnpm", "npm", "turborepo", "nx", "pnpm-workspaces",
-      "react-router-v7", "nextjs", "vite-react", "nestjs", "express", "fastify", "bullmq",
+      "react-router-v7", "nextjs", "vite-react", "tailwind",
+      "nestjs", "express", "fastify", "bullmq",
+      "fastapi", "node-ai-service",
+      "clerk", "authjs", "sentry-pino",
       "postgres", "mysql", "mongodb", "mariadb", "sqlite",
       "rest-openapi", "trpc", "graphql",
       "meilisearch", "elasticsearch", "minio", "s3",
@@ -123,6 +126,10 @@ describe("سلامتِ رجیستری", () => {
     const verified = TECHNOLOGIES.filter((t) => t.apply.verified).map((t) => t.id);
     assert.deepEqual(verified.sort(), [...REALLY_TESTED].sort());
     assert.equal(unverifiedTechnologies().length, TECHNOLOGIES.length - REALLY_TESTED.length);
+
+    // این دو هنوز اجرا نشده‌اند چون Docker روی این سیستم بالا نیامد. عمداً
+    // اینجا نوشته شده‌اند تا «هنوز نه» فراموش نشود و به «هست» ترجمه نشود.
+    assert.deepEqual(unverifiedTechnologies().map((t) => t.id).sort(), ["celery", "grafana-stack"]);
   });
 
   test("کمکی‌های خواندن درست کار می‌کنند", () => {

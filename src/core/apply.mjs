@@ -712,6 +712,16 @@ export async function applyTechnology({
     });
   }
 
+  // فایلی که از قبل بود و دست نخورد، باید گفته شود.
+  //
+  // چرا: writeFile عمداً روی فایلِ موجود نمی‌نویسد (تا کارِ کاربر نپرد)، ولی
+  // اگر ساکت رد شود، تکنولوژی نیمه‌وصل می‌ماند و ابزار «موفق» می‌گوید. در
+  // اجرای واقعی دیده شد: قالبِ Vite فایلِ App.css داشت و چون ویندوز بزرگ و
+  // کوچکِ حروف را یکی می‌بیند، فایلِ Tailwind هرگز نوشته نشد.
+  const skippedFiles = performed
+    .filter((x) => x.kind === "writeFile" && x.skipped)
+    .map((x) => `${x.path} از قبل وجود داشت و دست‌نخورده ماند — اگر محتوایش را لازم داری، خودت نگاهش کن.`);
+
   return {
     ok: true,
     techId,
@@ -719,6 +729,7 @@ export async function applyTechnology({
     steps: performed,
     decisionDoc: doc.file,
     git: gitResult,
+    manualSteps: skippedFiles.length ? skippedFiles : undefined,
     // مدرکِ واقعی، نه ادعا
     verified: optionAfter?.state === PRESENT,
     state: optionAfter?.state,

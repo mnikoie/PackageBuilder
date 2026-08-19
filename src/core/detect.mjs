@@ -139,6 +139,47 @@ export function detectMonorepoTool(projectPath) {
   return { ...absent("نه turbo.json، نه nx.json، نه pnpm-workspace.yaml"), tool: null, toolId: null };
 }
 
+/**
+ * یک پکیجِ پایتون واقعاً داخلِ venv نصب است؟
+ *
+ * مدرک، پوشهٔ خودِ پکیج در site-packages است — نه نامش در requirements.txt.
+ * (همان تفکیکِ همیشگی: «اعلام‌شده» با «نصب‌شده» یکی نیست.)
+ *
+ * دو چیدمانِ site-packages پشتیبانی می‌شود: ویندوز (Lib/site-packages) و
+ * یونیکس (lib/pythonX.Y/site-packages).
+ */
+export function detectPythonPackage(projectPath, app, name) {
+  const base = app ? join(projectPath, "apps", app) : projectPath;
+  const venv = join(base, ".venv");
+  const where = app ? `apps/${app}/.venv` : ".venv";
+
+  if (!existsSync(venv)) return absent(`${where} وجود ندارد`);
+
+  const roots = [join(venv, "Lib", "site-packages")];
+  const libDir = join(venv, "lib");
+  if (existsSync(libDir)) {
+    try {
+      for (const entry of readdirSync(libDir)) roots.push(join(libDir, entry, "site-packages"));
+    } catch {
+      return unknown(`${where}/lib خوانده نشد`);
+    }
+  }
+
+  const found = roots.find((r) => existsSync(r));
+  if (!found) return unknown(`${where} هست ولی site-packages پیدا نشد — احتمالاً نیمه‌ساخته`);
+
+  // نامِ پکیج روی دیسک با خط‌تیره/زیرخط فرق می‌کند (مثلِ python-multipart)
+  const candidates = [name, name.replace(/-/g, "_")];
+  for (const c of candidates) {
+    if (existsSync(join(found, c))) return present(`${c} در ${where}/site-packages موجود است`);
+  }
+  // بعضی پکیج‌ها فقط یک ماژولِ تک‌فایلی‌اند
+  for (const c of candidates) {
+    if (existsSync(join(found, `${c}.py`))) return present(`${c}.py در ${where}/site-packages موجود است`);
+  }
+  return absent(`${name} در ${where}/site-packages نیست`);
+}
+
 /** وابستگی‌های node یک app واقعاً نصب شده‌اند؟ مدرک: خودِ پوشهٔ node_modules. */
 export function detectNodeModules(projectPath, app) {
   const where = app ? `apps/${app}/node_modules` : "node_modules";
