@@ -981,7 +981,22 @@ export const TECHNOLOGIES = [
     category: "styling",
     label: "Tailwind CSS",
     requires: ["pnpm"],
-    detect: { kind: "npm", role: "web", name: "tailwindcss" },
+    // Tailwind با یک نام شناخته نمی‌شود.
+    //
+    // بسته به باندلر، نامِ بسته‌اش فرق می‌کند: هستهٔ tailwindcss، یا افزونهٔ
+    // postcss (که قالبِ رسمیِ Next.js خودش می‌آورد)، یا افزونهٔ Vite. نگارشِ
+    // قبلی فقط هسته را می‌دید، و نتیجه‌اش یک **نیستِ دروغین** بود: پروژه‌ای
+    // که با Next ساخته شده بود و globals.css اش `@import "tailwindcss"` داشت
+    // و postcss.config هم به آن وصل بود، «Tailwind نصب نیست» گزارش می‌شد.
+    // در پروژهٔ واقعیِ کاربر دیده شد.
+    detect: {
+      kind: "any",
+      of: [
+        { kind: "npm", role: "web", name: "tailwindcss" },
+        { kind: "npm", role: "web", name: "@tailwindcss/postcss" },
+        { kind: "npm", role: "web", name: "@tailwindcss/vite" },
+      ],
+    },
     apply: {
       verified: true,
       steps: [
@@ -1442,7 +1457,15 @@ export const REMOVALS = {
     ],
     manual: "پوشهٔ apps/worker-py و محیطِ مجازی‌اش می‌ماند — کدِ کارگرت آنجاست. خودت تصمیم بگیر.",
   },
-  tailwind: { steps: [{ kind: "cli", command: "pnpm --filter web remove tailwindcss @tailwindcss/cli" }] },
+  tailwind: {
+    steps: [{ kind: "cli", command: "pnpm --filter web remove tailwindcss @tailwindcss/cli" }],
+    // فقط چیزی که خودمان نصب کرده‌ایم برداشته می‌شود. اگر قالبِ Next.js
+    // خودش @tailwindcss/postcss آورده باشد، دست نمی‌خورد — وگرنه بیلدِ
+    // پروژه‌ات می‌شکند. اگر واقعاً می‌خواهی Tailwind کاملاً برود، باید
+    // postcss.config و globals.css را هم خودت دست بزنی.
+    manual:
+      "اگر فرانتِ پروژه‌ات Next.js است، Tailwind از قالبِ خودِ Next هم می‌آید (@tailwindcss/postcss). آن را دست نزدیم چون مالِ ما نبود؛ برای حذفِ کامل باید postcss.config و globals.css را هم خودت عوض کنی.",
+  },
   bootstrap: { steps: [{ kind: "cli", command: "pnpm --filter web remove bootstrap" }] },
   // پکیج برداشته می‌شود (همان چیزی که مدرکِ نصب بود)، ولی کدِ خودت می‌ماند.
   // اگر فقط manual می‌گذاشتیم، مدرک سرِ جایش می‌ماند و این دسته برای همیشه
