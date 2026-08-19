@@ -803,6 +803,7 @@
       btn.disabled = false;
       // بعد از نصب، همان گروه باز بماند و بقیه بسته.
       openGroup = groupOf(techId);
+      stackCache.clear(); // وضعیت عوض شده؛ کشِ کهنه دیگر مدرک نیست
       loadDecisions();
       load();
     }
@@ -1035,14 +1036,27 @@
     }
   }
 
-  async function loadDecisions() {
+  // جوابِ هر زبان کش می‌شود تا تعویضِ زبان فوری باشد. کلید، مسیر و زبان.
+  const stackCache = new Map();
+  const cacheKey = (path, lang) => lang + "|" + path;
+
+  async function loadDecisions({ useCache = false } = {}) {
     const path = $("path").value.trim();
     const host = $("decisions");
     if (!path) { host.textContent = ""; return; }
+
+    const key = cacheKey(path, LANG);
+    if (useCache && stackCache.has(key)) {
+      const c = stackCache.get(key);
+      renderDecisions(path, c.stack, c.freshness);
+      return;
+    }
+
     try {
       const r = await fetch("/api/stack?lang=" + LANG + "&path=" + encodeURIComponent(path));
       const data = await r.json();
       if (!data.ok) { host.textContent = ""; return; }
+      stackCache.set(key, { stack: data.stack, freshness: data.freshness });
       renderDecisions(path, data.stack, data.freshness);
     } catch {
       host.textContent = "";
@@ -1067,22 +1081,37 @@
     }
   }
 
-  $("go").addEventListener("click", () => { load(); loadDecisions(); });
+  $("go").addEventListener("click", () => { stackCache.clear(); load(); loadDecisions().then(prefetchOtherLang); });
+
+  /** زبانِ دیگر را بی‌صدا می‌گیریم تا تعویض بعداً فوری باشد. */
+  async function prefetchOtherLang() {
+    const path = $("path").value.trim();
+    const other = LANG === "fa" ? "en" : "fa";
+    const key = cacheKey(path, other);
+    if (!path || stackCache.has(key)) return;
+    try {
+      const r = await fetch("/api/stack?lang=" + other + "&path=" + encodeURIComponent(path));
+      const data = await r.json();
+      if (data.ok) stackCache.set(key, { stack: data.stack, freshness: data.freshness });
+    } catch { /* بی‌اهمیت — فقط پیش‌گرفتن بود */ }
+  }
 
   // تعویضِ زبان: انتخاب ذخیره می‌شود و صفحه از نو با همان زبان ساخته می‌شود.
-  $("langBtn").addEventListener("click", () => {
+  $("langBtn").addEventListener("click", async () => {
     LANG = LANG === "fa" ? "en" : "fa";
     localStorage.setItem(LANG_KEY, LANG);
     applyLang();
-    load();
-    loadDecisions();
+
+    // اگر این زبان قبلاً گرفته شده، همان لحظه رندر می‌شود؛ وگرنه یک درخواستِ
+    // سبک. گزارشِ probe اصلاً دوباره گرفته نمی‌شود — متنش عوض نمی‌شود.
+    await loadDecisions({ useCache: true });
   });
 
   applyLang();
-  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") { load(); loadDecisions(); } });
+  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") { stackCache.clear(); load(); loadDecisions().then(prefetchOtherLang); } });
 
   let timer = null;
-  $("path").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { load(); loadDecisions(); }, 500); });
+  $("path").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { stackCache.clear(); load(); loadDecisions(); }, 500); });
 
   // ---------------------------------------------------------------- ترمینال
 
@@ -1115,7 +1144,7 @@
     // دکمه‌های اعمال/برگشت تا وصل‌شدنِ ترمینال خاموش می‌مانند: فرمانی که
     // خروجی‌اش دیده نشود، ناقضِ قاعدهٔ «هیچ چیزی پنهان اجرا نشود» است.
     // (این را تستِ سرتاسری پیدا کرد: کلیکِ قبل از اتصال، خروجی را می‌بلعید.)
-    if (termReady !== on) { termReady = on; loadDecisions(); }
+    if (termReady !== on) { termReady = on; loadDecisions({ useCache: true }); }
   }
 
   const pendingSteps = new Map();
@@ -1189,7 +1218,7 @@
 
   // مسیر در آدرسِ صفحه هم قابلِ دادن است: /?path=...
   const fromUrl = new URLSearchParams(location.search).get("path");
-  if (fromUrl) { $("path").value = fromUrl; load(); loadDecisions(); }
+  if (fromUrl) { $("path").value = fromUrl; load(); loadDecisions().then(prefetchOtherLang); }
 </script>
 </body>
 </html>
