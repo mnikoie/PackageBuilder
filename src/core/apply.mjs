@@ -167,6 +167,37 @@ export function allowPnpmBuilds(projectPath, packages) {
   return { changed: true, allowed: packages };
 }
 
+/**
+ * چه چیزهایی از یک اعمالِ **شکست‌خورده** روی دیسک مانده‌اند.
+ *
+ * چرا لازم است: وقتی گامِ آخر می‌شکند، گام‌های قبلی همان‌جا مانده‌اند —
+ * پوشه‌ها، فایل‌ها، پکیج‌های نصب‌شده، سرویس‌های بالا آمده. نگارشِ قبلی فقط
+ * می‌گفت «شکست خورد» و ساکت می‌ماند؛ کاربر نمی‌دانست پروژه‌اش الان در چه
+ * حالی است و چرا درختِ گیتش کثیف شده. (nextVersion.md بندِ ۳)
+ *
+ * عمداً چیزی را خودمان پاک نمی‌کنیم: ممکن است کاربر همان لحظه دستی درستش
+ * کرده باشد. فقط صریح می‌گوییم چه هست و تصمیم را به او می‌سپاریم.
+ *
+ * @param {Array<object>} performed گام‌هایی که واقعاً انجام شدند
+ * @returns {string[]} توضیحِ خوانا، به ترتیبِ انجام
+ */
+export function describeLeftovers(performed = []) {
+  const out = [];
+  for (const step of performed) {
+    if (step.kind === "writeFile" && step.changed) out.push(`فایلِ ساخته‌شده: ${step.path}`);
+    else if (step.kind === "mkdir" && step.changed) out.push(`پوشهٔ ساخته‌شده: ${step.path}`);
+    else if (step.kind === "pnpmWorkspace" && step.changed) out.push("pnpm-workspace.yaml نوشته یا کامل شد");
+    else if (step.kind === "cli" && step.ok) out.push(`فرمانی که اجرا شد: ${step.command}`);
+    else if (step.kind === "composeUp" && step.ok) out.push(`سرویسِ بالا آمده: ${step.service}`);
+    else if (step.kind === "compose" && step.changed) out.push("deployment/docker-compose.yml از نو ساخته شد");
+    else if (step.kind === "env" && step.changed) out.push(`متغیرهای env که اضافه شدند: ${(step.added || []).join("، ")}`);
+    else if (step.kind === "ports" && Object.keys(step.vars || {}).length) {
+      out.push(`پورت‌هایی که انتخاب و ذخیره شدند: ${Object.entries(step.vars).map(([k, v]) => `${k}=${v}`).join("، ")}`);
+    }
+  }
+  return out;
+}
+
 // ---------------------------------------------------------------- پورتِ آزاد
 
 /**

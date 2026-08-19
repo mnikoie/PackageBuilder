@@ -294,6 +294,16 @@ async function runApplyOrRevert(opts) {
     console.error(`✗ ${result.error}`);
     if (result.snippet) console.error(`\nAdd this piece by hand:\n${result.snippet}`);
     if (result.needs) console.error(`\nInstall these first: ${result.needs.join(", ")}`);
+
+    // آنچه پیش از شکست ساخته شده بود، همان‌جا مانده. سکوت درباره‌اش یعنی
+    // کاربر نمی‌داند پروژه‌اش در چه حالی است.
+    const { describeLeftovers } = await import("./core/apply.mjs");
+    const leftovers = describeLeftovers(result.steps);
+    if (leftovers.length) {
+      console.error(`\nThese were already done and are still there:`);
+      for (const line of leftovers) console.error(`  • ${line}`);
+      console.error(`\nNothing was rolled back on purpose - your call: clean them up, or fix the problem and run again.`);
+    }
     console.error("");
     process.exit(1);
   }

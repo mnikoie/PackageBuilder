@@ -18,7 +18,7 @@ import { spawnSync } from "node:child_process";
 import {
   applyEnvVars, generateCompose, composeServicesFor, nextDecisionNumber,
   writeDecisionDoc, updateStackConfig, applyTechnology, revertTechnology, removeEnvVars,
-  ensurePnpmWorkspace, GENERATED_MARKER,
+  ensurePnpmWorkspace, describeLeftovers, GENERATED_MARKER,
 } from "../src/core/apply.mjs";
 import { scaffoldProject } from "../src/core/scaffold.mjs";
 import { technologyById } from "../src/core/registry.mjs";
@@ -548,3 +548,28 @@ describe("ensurePnpmWorkspace", () => {
   });
 });
 
+describe("describeLeftovers", () => {
+  // اعمالی که وسطِ راه بشکند، ساخته‌هایش سرِ جایشان می‌مانند. سکوت درباره‌شان
+  // یعنی کاربر نمی‌داند پروژه‌اش در چه حالی است (nextVersion.md بندِ ۳).
+  test("کارِ انجام‌شده را می‌شمارد و کارِ نشده را نه", () => {
+    const out = describeLeftovers([
+      { kind: "mkdir", path: "apps/worker", changed: true },
+      { kind: "writeFile", path: "apps/worker/tasks.py", changed: true },
+      { kind: "writeFile", path: "apps/api/package.json", skipped: "از قبل بود" },
+      { kind: "cli", command: "python -m venv .venv", ok: true },
+      { kind: "cli", command: "pnpm add چیزی", ok: false },
+      { kind: "composeUp", service: "redis", ok: false },
+    ]);
+    assert.equal(out.length, 3);
+    assert.match(out[0], /apps\/worker/);
+    assert.match(out[2], /venv/);
+    // فایلی که رد شد و فرمانی که شکست خورد، «جامانده» نیستند
+    assert.ok(!out.some((l) => l.includes("package.json")));
+    assert.ok(!out.some((l) => l.includes("pnpm add")));
+  });
+
+  test("وقتی هیچ کاری نشده، چیزی نمی‌گوید", () => {
+    assert.deepEqual(describeLeftovers([]), []);
+    assert.deepEqual(describeLeftovers(), []);
+  });
+});
