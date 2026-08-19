@@ -114,7 +114,7 @@ describe("سلامتِ رجیستری", () => {
     const REALLY_TESTED = [
       // هر ۲۸ مورد واقعاً از پوشهٔ خالی تا مدرکِ کارکردن اجرا شد.
       "node", "python", "pnpm", "npm", "turborepo", "nx", "pnpm-workspaces",
-      "react-router-v7", "nextjs", "vite-react", "tailwind",
+      "react-router-v7", "nextjs", "vite-react", "tailwind", "bootstrap",
       "nestjs", "express", "fastify", "bullmq",
       "fastapi", "node-ai-service",
       "clerk", "authjs", "sentry-pino", "grafana-stack", "celery",

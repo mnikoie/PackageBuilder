@@ -389,6 +389,21 @@ const PROMETHEUS_YML = [
   "",
 ].join("\n");
 
+/**
+ * ورودیِ استایل برای Bootstrap.
+ *
+ * برخلافِ Tailwind که در زمانِ بیلد کلاس می‌سازد، Bootstrap یک فایلِ CSSِ
+ * آمادهٔ کامل است؛ پس فقط import می‌شود. آیکون‌ها و اجزای جاوااسکریپتی‌اش
+ * (مثلِ modal) جدا می‌آیند و اینجا تحمیل نشده‌اند.
+ */
+const BOOTSTRAP_CSS = [
+  "/* Bootstrap: فایلِ آمادهٔ کامل. */",
+  '@import "bootstrap/dist/css/bootstrap.min.css";',
+  "",
+  "/* استایلِ خودت را از اینجا به بعد بنویس. */",
+  "",
+].join("\n");
+
 const WORKER_APP = minimalApp("worker", "src/main.js", [
   'import { Worker } from "bullmq";',
   "",
@@ -420,7 +435,7 @@ export const CATEGORIES = [
   },
   {
     id: "monorepoTool",
-    label: "ساختارِ مخزن",
+    label: "ساختارِ مخزن (مونوریپو)",
     question: "یک پکیجِ تنها، یا چند app در یک مخزن؟",
     requiresCategory: "packageManager",
   },
@@ -475,7 +490,7 @@ export const CATEGORIES = [
   },
   {
     id: "e2e",
-    label: "تستِ سرتاسری",
+    label: "تستِ سرتاسری (e2e)",
     question: "رفتارِ واقعیِ برنامه چطور خودکار آزمایش شود؟",
     requiresCategory: "packageManager",
   },
@@ -987,6 +1002,28 @@ export const TECHNOLOGIES = [
       cons: ["کلاس‌ها HTML را شلوغ می‌کنند", "برای تیمی که CSS بلد است، یک زبانِ نو برای یادگیری"],
     },
   },
+  {
+    id: "bootstrap",
+    category: "styling",
+    label: "Bootstrap",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "web", name: "bootstrap" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "mkdir", path: "apps/web/src" },
+        // نامِ فایل عمداً bootstrap.css است: قالب‌های Vite فایلِ App.css دارند و
+        // ویندوز بزرگ و کوچکِ حروف را یکی می‌بیند (همان تلهٔ Tailwind).
+        { kind: "writeFile", path: "apps/web/src/bootstrap.css", content: BOOTSTRAP_CSS },
+        { kind: "cli", command: "pnpm --filter web add bootstrap" },
+      ],
+    },
+    meta: {
+      pros: ["اجزای آماده (دکمه، فرم، مودال) بی نوشتنِ CSS", "برای کسی که CSS بلد نیست سریع‌ترین راه", "پشتیبانیِ راست‌به‌چپ در خودش دارد"],
+      cons: ["سایت‌ها شبیهِ هم می‌شوند مگر سفارشی‌سازی کنی", "کلِ فایل می‌آید حتی اگر کمی‌اش را استفاده کنی", "برای طراحیِ خاص، جنگیدن با پیش‌فرض‌هایش سخت است"],
+    },
+  },
 
   // ------------------------------------------ سرویسِ AI / پردازشِ فارسی
   {
@@ -1406,6 +1443,7 @@ export const REMOVALS = {
     manual: "پوشهٔ apps/worker-py و محیطِ مجازی‌اش می‌ماند — کدِ کارگرت آنجاست. خودت تصمیم بگیر.",
   },
   tailwind: { steps: [{ kind: "cli", command: "pnpm --filter web remove tailwindcss @tailwindcss/cli" }] },
+  bootstrap: { steps: [{ kind: "cli", command: "pnpm --filter web remove bootstrap" }] },
   // پکیج برداشته می‌شود (همان چیزی که مدرکِ نصب بود)، ولی کدِ خودت می‌ماند.
   // اگر فقط manual می‌گذاشتیم، مدرک سرِ جایش می‌ماند و این دسته برای همیشه
   // قفل می‌شد — یعنی نقضِ قاعدهٔ «هر کاری دو طرفه». در اجرای واقعی دیده شد.
