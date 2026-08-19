@@ -274,7 +274,8 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
       try {
         const probe = probeProject(target);
         if (!probe.exists || !probe.isDirectory) return sendJson(res, 200, { ok: false, error: probe.error });
-        return sendJson(res, 200, { ok: true, stack: resolveRegistry(probe.path, { probe }), freshness: registryFreshness() });
+        const lang = url.searchParams.get("lang") === "en" ? "en" : "fa";
+        return sendJson(res, 200, { ok: true, stack: resolveRegistry(probe.path, { probe, lang }), freshness: registryFreshness() });
       } catch (err) {
         return sendJson(res, 500, { ok: false, error: `خطا در بررسی: ${err.message}` });
       }

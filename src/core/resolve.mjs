@@ -22,6 +22,7 @@ import {
   detectNpmPackage, detectNodeModules, detectPythonVenv, detectPythonPackage, detectMonorepoTool,
 } from "./detect.mjs";
 import { CATEGORIES, TECHNOLOGIES, describeApply, describeRemoval } from "./registry.mjs";
+import { CATEGORIES_EN, TECH_EN } from "./i18n.mjs";
 
 const present = (evidence) => ({ state: PRESENT, evidence });
 const absent = (evidence) => ({ state: ABSENT, evidence });
@@ -174,7 +175,7 @@ export function evaluateDetect(projectPath, spec, ctx = {}) {
  *   unverified: string[],
  * }}
  */
-export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, technologies = TECHNOLOGIES } = {}) {
+export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, technologies = TECHNOLOGIES, lang = "fa" } = {}) {
   const ctx = { probe };
   const byId = new Map();
 
@@ -185,6 +186,13 @@ export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, t
 
   // مرحلهٔ دوم: پیش‌نیازها. اگر پیش‌نیاز نیست، خودِ گزینه قابلِ نصب نیست —
   // ولی این با «نصب نیست» فرق دارد و باید جدا گزارش شود.
+  // برچسب و پرسش و توضیحِ دسته، به زبانِ خواسته‌شده. اگر ترجمه‌ای نبود،
+  // فارسی می‌ماند — چیزی نصفه‌ونیمه نشان داده نمی‌شود.
+  const en = (cat, key) => {
+    if (lang === "en" && CATEGORIES_EN[cat.id] && CATEGORIES_EN[cat.id][key]) return CATEGORIES_EN[cat.id][key];
+    return cat[key] || "";
+  };
+
   const resolvedCategories = categories.map((cat) => {
     const options = technologies
       .filter((t) => t.category === cat.id)
@@ -198,7 +206,7 @@ export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, t
           label: t.label,
           state: found.state,
           evidence: found.evidence,
-          meta: t.meta,
+          meta: lang === "en" && TECH_EN[t.id] ? TECH_EN[t.id] : t.meta,
           verified: !!t.apply?.verified,
           missingRequirements: missing,
           // برای مودالِ راهنما در UI: دقیقاً همان کاری که انجام می‌شود.
@@ -213,9 +221,9 @@ export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, t
 
     return {
       id: cat.id,
-      label: cat.label,
-      question: cat.question,
-      description: cat.description || "",
+      label: en(cat, "label"),
+      question: en(cat, "question"),
+      description: en(cat, "description"),
       foundational: !!cat.foundational,
       options,
       chosen: hits.length === 1 ? hits[0].id : null,

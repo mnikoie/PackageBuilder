@@ -49,6 +49,13 @@
   .xterm-viewport::-webkit-scrollbar-track { background: #0c0c0c; }
 
   h1 { font-size: 1.15rem; margin: 0 0 4px; }
+  .topbar { display: flex; align-items: center; gap: 10px; }
+  .topbar h1 { flex: 1; }
+  .lang-btn {
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 20px; padding: 3px 14px; font-size: .76rem; cursor: pointer;
+  }
+  .lang-btn:hover { color: var(--accent); border-color: var(--accent); }
   .sub { color: var(--muted); font-size: .82rem; margin-bottom: 18px; }
 
   .bar { display: flex; gap: 8px; margin-bottom: 6px; }
@@ -258,36 +265,35 @@
 
 <div class="layout">
   <div class="left">
-    <h1>وضعیتِ واقعیِ پروژه</h1>
-    <div class="sub">وضعیت فقط خوانده می‌شود. هر فرمانی که اجرا شود، در ترمینالِ کنار دیده می‌شود.</div>
+    <div class="topbar">
+      <h1 id="appTitle">وضعیتِ واقعیِ پروژه</h1>
+      <button id="langBtn" class="lang-btn">English</button>
+    </div>
+    <div class="sub" id="appSub">وضعیت فقط خوانده می‌شود.</div>
 
     <div class="bar">
-      <input id="path" type="text" placeholder="مسیرِ پوشهٔ پروژه — مثلاً ./my-app یا یک مسیرِ کامل" spellcheck="false" />
+      <input id="path" type="text" spellcheck="false" />
       <button id="go">بررسی</button>
     </div>
     <div class="legend">
-      <span><span class="chip ok">✓ هست</span> <b>مدرک دیدیم که هست</b></span>
-      <span><span class="chip no">✗ نیست</span> <b>مدرک دیدیم که نیست</b></span>
-      <span><span class="chip maybe">؟ نامعلوم</span> <b>نتوانستیم بپرسیم</b></span>
+      <span><span class="chip ok">✓</span> <b id="lgYes"></b></span>
+      <span><span class="chip no">✗</span> <b id="lgNo"></b></span>
+      <span><span class="chip maybe">؟</span> <b id="lgMaybe"></b></span>
     </div>
 
     <div id="makeHost"></div>
     <div id="decisions"></div>
     <div id="out"></div>
 
-    <div class="ro">
-      «نامعلوم» با «نیست» یکی نیست. اگر Docker بالا نباشد، وضعیتِ سرویس‌ها
-      <em>نامعلوم</em> است — نه «نصب نیست». نسخهٔ قبلیِ این ابزار همین دو را قاطی
-      می‌کرد و چیزهای نصب‌نشده را سبز نشان می‌داد.
-    </div>
+    <div class="ro" id="footNote"></div>
   </div>
 
   <div class="right">
     <div class="term-head">
       <span class="dot" id="termDot"></span>
-      <span id="termLabel">ترمینال — در حالِ اتصال…</span>
+      <span id="termLabel"></span>
       <span class="spacer"></span>
-      <button id="termClear">پاک‌کردنِ نمایش</button>
+      <button id="termClear"></button>
     </div>
     <div id="terminal"></div>
   </div>
@@ -296,6 +302,178 @@
 <script src="/vendor/xterm.js"></script>
 <script src="/vendor/addon-fit.js"></script>
 <script>
+  // ------------------------------------------------------------ دو زبانه
+  //
+  // متن‌های ثابتِ صفحه اینجا هستند؛ برچسب و توضیحِ تکنولوژی‌ها از سرور
+  // می‌آید (src/core/i18n.mjs). جمله‌های «مدرک» عمداً ترجمه نمی‌شوند: آنها
+  // خروجیِ لحظه‌ایِ لایهٔ تشخیص‌اند و دست‌بردن در متنشان یعنی دست‌بردن در مدرک.
+  const LANG_KEY = "pb-lang";
+  let LANG = localStorage.getItem(LANG_KEY) === "en" ? "en" : "fa";
+
+  const DICT = {
+    fa: {
+      title: "وضعیتِ واقعیِ پروژه",
+      sub: "وضعیت فقط خوانده می‌شود. هر فرمانی که اجرا شود، در ترمینالِ کنار دیده می‌شود.",
+      pathPlaceholder: "مسیرِ پوشهٔ پروژه — مثلاً ./my-app یا یک مسیرِ کامل",
+      check: "بررسی",
+      legendYes: "مدرک دیدیم که هست",
+      legendNo: "مدرک دیدیم که نیست",
+      legendMaybe: "نتوانستیم بپرسیم",
+      footer: "«نامعلوم» با «نیست» یکی نیست. اگر Docker بالا نباشد، وضعیتِ سرویس‌ها نامعلوم است — نه «نصب نیست».",
+      termConnecting: "ترمینال — در حالِ اتصال…",
+      termClear: "پاک‌کردنِ نمایش",
+      langBtn: "English",
+      install: "نصب کن",
+      remove: "بردار",
+      installed: "از قبل نصب است",
+      unverified: "نصبش آزمایش‌نشده",
+      needsFirst: "اول لازم است",
+      notChosen: "— انتخاب نشده",
+      unknown: "؟ نامعلوم",
+      clash: "⚠ چند گزینه همزمان",
+      running: "در حالِ اجرا…",
+      pathNeeded: "مسیرِ یک پوشه را بده.",
+      checking: "در حالِ بررسی…",
+      makeTitle: "این پوشه هنوز اسکلتِ پروژه ندارد",
+      makeText: "اسکلت یعنی چند فایلِ پایه که هیچ تکنولوژی‌ای را تحمیل نمی‌کنند: README و CLAUDE.md و .gitignore و پوشهٔ اسناد و تصمیم‌ها و project.config.json. با همین، ابزار می‌فهمد چه تصمیم‌هایی گرفته‌ای و می‌تواند برشان گرداند.",
+      makeBtn: "اسکلتِ پروژه را بساز",
+      makeModal: "ساختِ اسکلتِ پروژه",
+      makeLead: "چند فایلِ پایه ساخته می‌شود و یک مخزنِ گیت راه می‌افتد. هیچ تکنولوژی‌ای انتخاب نمی‌شود — آن‌ها را بعداً خودت می‌زنی.",
+      path: "مسیر",
+      displayName: "نامِ نمایشیِ پروژه (اختیاری)",
+      namePlaceholder: "پیش‌فرض: نامِ خودِ پوشه",
+      create: "بساز",
+      cancel: "بی‌خیال",
+      ok: "فهمیدم",
+      close: "بستن",
+      groupHelp: "توضیحِ این گروه",
+      optHelp: "توضیحِ این گزینه",
+      whatItDecides: "این تصمیم چه چیزی را مشخص می‌کند",
+      options: "گزینه‌ها",
+      noteLabel: "توجه",
+      foundational: "این یک تصمیمِ پایه است: بقیهٔ تصمیم‌ها رویش سوار می‌شوند، پس عوض‌کردنش بعداً سخت‌تر است.",
+      state: "وضعیت",
+      evidence: "مدرک",
+      group: "گروه",
+      requires: "پیش‌نیاز",
+      warning: "هشدار",
+      unverifiedLong: "نصبِ این گزینه هنوز روی پوشهٔ خالی آزمایش نشده است.",
+      why: "چرا خوب است",
+      caveats: "چه چیزی را باید بدانی",
+      whatHappens: "با زدنِ «نصب کن» دقیقاً چه می‌شود",
+      howRevert: "برگشت چطور است",
+      failed: "انجام نشد",
+      addYourself: "این تکه را خودت اضافه کن",
+      installFirst: "اول این‌ها را نصب کن",
+      leftovers: "این‌ها انجام شده‌اند و سرِ جایشان مانده‌اند",
+      leftoversNote: "عمداً چیزی پاک نشد — تصمیمش با توست: یا خودت بردارشان، یا مشکل را حل کن و دوباره بزن.",
+      noteSuffix: "چند نکته",
+      notesLead: "ولی چند چیز هست که باید بدانی:",
+      installedVerb: "نصب شد",
+      removedVerb: "برداشته شد",
+      noEvidence: "فرمان‌ها اجرا شدند ولی مدرکِ نصب دیده نشد — خروجیِ ترمینال را بخوان.",
+      serverUnreachable: "درخواست به سرور نرسید",
+      notCreated: "ساخته نشد",
+      notCreatedNote: "اگر پوشه خالی نیست، ابزار عمداً دست نمی‌زند تا کارِ موجود پاک نشود.",
+      scaffolded: "✓ اسکلتِ پروژه ساخته شد",
+      files: "فایل",
+      gitOk: "گیت راه افتاد و کامیتِ پایه زده شد",
+      gitNo: "گیت راه نیفتاد",
+      stale: "⚠ فهرستِ تکنولوژی‌ها بعد از راه‌اندازیِ سرور عوض شده. برای دیدنِ گزینه‌های نو، سرور را ری‌استارت کن.",
+      termNotReady: "تا ترمینال وصل نشود، فرمان اجرا نمی‌شود",
+      needPrereq: "اول پیش‌نیازش را نصب کن",
+    },
+    en: {
+      title: "What is really in this project",
+      sub: "This view only reads. Every command that runs is visible in the terminal beside it.",
+      pathPlaceholder: "Path to the project folder — e.g. ./my-app or a full path",
+      check: "Check",
+      legendYes: "we found proof it is there",
+      legendNo: "we found proof it is not",
+      legendMaybe: "we could not check",
+      footer: "\"Unknown\" is not \"absent\". If Docker is down, the state of services is unknown — not \"not installed\".",
+      termConnecting: "Terminal — connecting…",
+      termClear: "Clear view",
+      langBtn: "فارسی",
+      install: "Install",
+      remove: "Remove",
+      installed: "already installed",
+      unverified: "install not proven",
+      needsFirst: "needs first",
+      notChosen: "— not chosen",
+      unknown: "? unknown",
+      clash: "⚠ several at once",
+      running: "running…",
+      pathNeeded: "Give me a folder path.",
+      checking: "checking…",
+      makeTitle: "This folder has no project skeleton yet",
+      makeText: "The skeleton is a handful of base files that impose no technology: README, CLAUDE.md, .gitignore, a docs and decisions folder, and project.config.json. With those in place the tool can tell which decisions you have made — and undo them.",
+      makeBtn: "Create the skeleton",
+      makeModal: "Create the project skeleton",
+      makeLead: "A few base files are written and a git repository is started. No technology is chosen — those come later, by you.",
+      path: "Path",
+      displayName: "Display name (optional)",
+      namePlaceholder: "default: the folder's own name",
+      create: "Create",
+      cancel: "Cancel",
+      ok: "Got it",
+      close: "Close",
+      groupHelp: "About this group",
+      optHelp: "About this option",
+      whatItDecides: "What this decision settles",
+      options: "Options",
+      noteLabel: "Note",
+      foundational: "This is a foundational decision: the rest sit on top of it, so changing it later is harder.",
+      state: "State",
+      evidence: "Evidence",
+      group: "Group",
+      requires: "Requires",
+      warning: "Warning",
+      unverifiedLong: "Installing this option has not yet been tried on an empty folder.",
+      why: "Why it is good",
+      caveats: "What you should know",
+      whatHappens: "What pressing Install actually does",
+      howRevert: "How removal works",
+      failed: "Did not work",
+      addYourself: "Add this piece yourself",
+      installFirst: "Install these first",
+      leftovers: "These were already done and are still there",
+      leftoversNote: "Nothing was rolled back on purpose — your call: clean them up, or fix the problem and try again.",
+      noteSuffix: "a few notes",
+      notesLead: "but there are a few things you should know:",
+      installedVerb: "installed",
+      removedVerb: "removed",
+      noEvidence: "The commands ran but no evidence of an install was seen — read the terminal output.",
+      serverUnreachable: "The server did not answer",
+      notCreated: "Not created",
+      notCreatedNote: "If the folder is not empty the tool deliberately leaves it alone, so existing work is not lost.",
+      scaffolded: "✓ Skeleton created",
+      files: "files",
+      gitOk: "git started with a base commit",
+      gitNo: "git did not start",
+      stale: "⚠ The technology list changed after the server started. Restart the server to see the new options.",
+      termNotReady: "commands do not run until the terminal is connected",
+      needPrereq: "install its prerequisite first",
+    },
+  };
+
+  const T = (k) => DICT[LANG][k] ?? DICT.fa[k] ?? k;
+
+  function applyLang() {
+    document.documentElement.lang = LANG;
+    document.documentElement.dir = LANG === "en" ? "ltr" : "rtl";
+    $("appTitle").textContent = T("title");
+    $("appSub").textContent = T("sub");
+    $("path").placeholder = T("pathPlaceholder");
+    $("go").textContent = T("check");
+    $("lgYes").textContent = T("legendYes");
+    $("lgNo").textContent = T("legendNo");
+    $("lgMaybe").textContent = T("legendMaybe");
+    $("footNote").textContent = T("footer");
+    $("termClear").textContent = T("termClear");
+    $("langBtn").textContent = T("langBtn");
+  }
+
   const $ = (id) => document.getElementById(id);
   const CHIP = { present: ["ok", "✓"], absent: ["no", "✗"], unknown: ["maybe", "؟"] };
 
@@ -334,7 +512,7 @@
     const head = document.createElement("header");
     head.append(el("h3", null, title));
     const x = el("button", "x", "×");
-    x.setAttribute("aria-label", "بستن");
+    x.setAttribute("aria-label", T("close"));
     x.addEventListener("click", closeModal);
     head.append(x);
 
@@ -349,7 +527,7 @@
         foot.append(b);
       }
     } else {
-      const b = el("button", "primary", "فهمیدم");
+      const b = el("button", "primary", T("ok"));
       b.addEventListener("click", closeModal);
       foot.append(b);
     }
@@ -415,10 +593,9 @@
     makeHost.textContent = "";
     if (probe.scaffolded && probe.scaffolded.state !== "present") {
       const box = el("div", "make");
-      box.append(el("div", "mtitle", "این پوشه هنوز اسکلتِ پروژه ندارد"));
-      box.append(el("div", "mtext",
-        "اسکلت یعنی چند فایلِ پایه که هیچ تکنولوژی‌ای را تحمیل نمی‌کنند: README و CLAUDE.md و .gitignore و پوشهٔ اسناد و تصمیم‌ها و project.config.json. با همین، ابزار می‌فهمد چه تصمیم‌هایی گرفته‌ای و می‌تواند برشان گرداند."));
-      const btn = el("button", null, "اسکلتِ پروژه را بساز");
+      box.append(el("div", "mtitle", T("makeTitle")));
+      box.append(el("div", "mtext", T("makeText")));
+      const btn = el("button", null, T("makeBtn"));
       btn.addEventListener("click", () => askAndScaffold(probe.path));
       box.append(btn);
       makeHost.append(box);
@@ -568,7 +745,7 @@
     if (busy) return;
     busy = true;
     const original = btn.textContent;
-    btn.textContent = "در حالِ اجرا…";
+    btn.textContent = T("running");
     btn.disabled = true;
 
     try {
@@ -581,45 +758,45 @@
 
       if (!r.ok) {
         // شکست باید دیده و بسته شود، پس مودال.
-        modal(`انجام نشد — ${label}`, (b) => {
+        modal(`${T("failed")} — ${label}`, (b) => {
           b.append(el("p", "lead", r.error));
           if (r.snippet) {
-            b.append(el("h4", null, "این تکه را خودت اضافه کن"));
+            b.append(el("h4", null, T("addYourself")));
             const pre = document.createElement("pre");
             pre.textContent = r.snippet;
             b.append(pre);
           }
           if (r.needs && r.needs.length) {
-            b.append(el("h4", null, "اول این‌ها را نصب کن"));
+            b.append(el("h4", null, T("installFirst")));
             bullets(b, r.needs);
           }
           const left = leftovers(r.steps);
           if (left.length) {
-            b.append(el("h4", null, "این‌ها انجام شده‌اند و سرِ جایشان مانده‌اند"));
+            b.append(el("h4", null, T("leftovers")));
             bullets(b, left);
-            b.append(el("div", null, "عمداً چیزی پاک نشد — تصمیمش با توست: یا خودت بردارشان، یا مشکل را حل کن و دوباره بزن."));
+            b.append(el("div", null, T("leftoversNote")));
           }
         }, { danger: true });
       } else if (r.alreadyPresent) {
         // این حالت قبلاً عملاً نامرئی بود.
-        toast(`${label} از قبل نصب است`, r.evidence, { warn: true });
+        toast(`${label} — ${T("installed")}`, r.evidence, { warn: true });
       } else {
-        const verb = kind === "apply" ? "نصب شد" : "برداشته شد";
+        const verb = kind === "apply" ? T("installedVerb") : T("removedVerb");
         toast(`✓ ${label} ${verb}`, r.evidence);
 
         // نکته‌هایی که کاربر **باید** ببیند، توست نیستند.
         const notes = [];
-        if (kind === "apply" && !r.verified) notes.push("فرمان‌ها اجرا شدند ولی مدرکِ نصب دیده نشد — خروجیِ ترمینال را بخوان.");
+        if (kind === "apply" && !r.verified) notes.push(T("noEvidence"));
         if (r.manualSteps && r.manualSteps.length) notes.push(...r.manualSteps);
         if (notes.length) {
-          modal(`${label} — چند نکته`, (b) => {
-            b.append(el("p", "lead", `${verb}، ولی چند چیز هست که باید بدانی:`));
+          modal(`${label} — ${T("noteSuffix")}`, (b) => {
+            b.append(el("p", "lead", `${verb} — ${T("notesLead")}`));
             bullets(b, notes);
           });
         }
       }
     } catch (err) {
-      modal("درخواست به سرور نرسید", (b) => b.append(el("p", "lead", err.message)), { danger: true });
+      modal(T("serverUnreachable"), (b) => b.append(el("p", "lead", err.message)), { danger: true });
     } finally {
       busy = false;
       btn.textContent = original;
@@ -636,10 +813,10 @@
     modal(cat.label, (body) => {
       body.append(el("p", "lead", cat.description || cat.question));
 
-      body.append(el("h4", null, "این تصمیم چه چیزی را مشخص می‌کند"));
+      body.append(el("h4", null, T("whatItDecides")));
       body.append(el("div", null, cat.question));
 
-      body.append(el("h4", null, `گزینه‌ها (${cat.options.length})`));
+      body.append(el("h4", null, `${T("options")} (${cat.options.length})`));
       const ul = document.createElement("ul");
       for (const o of cat.options) {
         const li = document.createElement("li");
@@ -650,8 +827,8 @@
       body.append(ul);
 
       if (cat.foundational) {
-        body.append(el("h4", null, "توجه"));
-        body.append(el("div", null, "این یک تصمیمِ پایه است: بقیهٔ تصمیم‌ها رویش سوار می‌شوند، پس عوض‌کردنش بعداً سخت‌تر است."));
+        body.append(el("h4", null, T("noteLabel")));
+        body.append(el("div", null, T("foundational")));
       }
     });
   }
@@ -667,30 +844,30 @@
         body.append(d);
       };
 
-      kv("وضعیت", caption);
-      kv("مدرک", opt.evidence || "—");
-      kv("گروه", cat.label);
-      if (opt.requires && opt.requires.length) kv("پیش‌نیاز", opt.requires.join("، "));
-      if (!opt.verified) kv("هشدار", "نصبِ این گزینه هنوز روی پوشهٔ خالی آزمایش نشده است.");
+      kv(T("state"), caption);
+      kv(T("evidence"), opt.evidence || "—");
+      kv(T("group"), cat.label);
+      if (opt.requires && opt.requires.length) kv(T("requires"), opt.requires.join("، "));
+      if (!opt.verified) kv(T("warning"), T("unverifiedLong"));
 
       if (opt.meta && opt.meta.pros && opt.meta.pros.length) {
-        body.append(el("h4", null, "چرا خوب است"));
+        body.append(el("h4", null, T("why")));
         bullets(body, opt.meta.pros, "plus");
       }
       if (opt.meta && opt.meta.cons && opt.meta.cons.length) {
-        body.append(el("h4", null, "چه چیزی را باید بدانی"));
+        body.append(el("h4", null, T("caveats")));
         bullets(body, opt.meta.cons, "minus");
       }
 
       if (opt.installs && opt.installs.length) {
-        body.append(el("h4", null, "با زدنِ «نصب کن» دقیقاً چه می‌شود"));
+        body.append(el("h4", null, T("whatHappens")));
         const pre = document.createElement("pre");
         pre.textContent = opt.installs.join("\n");
         body.append(pre);
       }
 
       if (opt.removal) {
-        body.append(el("h4", null, "برگشت چطور است"));
+        body.append(el("h4", null, T("howRevert")));
         if (opt.removal.lines && opt.removal.lines.length) {
           const pre = document.createElement("pre");
           pre.textContent = opt.removal.lines.join("\n");
@@ -713,8 +890,7 @@
     // اگر رجیستری بعد از بالا آمدنِ سرور عوض شده، صفحه نسخهٔ کهنه را نشان
     // می‌دهد. سکوت درباره‌اش دو بار وقت گرفت تا معلوم شود گزینه گم نشده.
     if (freshness && freshness.stale) {
-      host.append(el("div", "stale-bar",
-        "⚠ فهرستِ تکنولوژی‌ها بعد از راه‌اندازیِ سرور عوض شده. برای دیدنِ گزینه‌های نو، سرور را ری‌استارت کن (stop-server.bat و بعد start-server.bat)."));
+      host.append(el("div", "stale-bar", T("stale")));
     }
 
     for (const cat of stack.categories) {
@@ -726,20 +902,20 @@
       head.append(el("span", "gname", cat.label));
 
       const help = el("button", "info-btn", "؟");
-      help.title = "توضیحِ این گروه";
+      help.title = T("groupHelp");
       help.addEventListener("click", (e) => { e.stopPropagation(); showCategoryHelp(cat); });
       head.append(help);
 
       head.append(el("span", "gq", cat.question));
 
       if (cat.conflict) {
-        head.append(el("span", "verdict-pill clash", `⚠ چند گزینه همزمان: ${cat.conflict.join("، ")}`));
+        head.append(el("span", "verdict-pill clash", `${T("clash")}: ${cat.conflict.join("، ")}`));
       } else if (chosenOpt) {
         head.append(el("span", "verdict-pill chosen", `✓ ${chosenOpt.label}`));
       } else if (cat.uncertain) {
-        head.append(el("span", "verdict-pill vague", "؟ نامعلوم"));
+        head.append(el("span", "verdict-pill vague", T("unknown")));
       } else {
-        head.append(el("span", "verdict-pill none", "— انتخاب نشده"));
+        head.append(el("span", "verdict-pill none", T("notChosen")));
       }
       box.append(head);
 
@@ -756,15 +932,15 @@
         title.append(el("span", "chip " + cls, caption), el("b", null, opt.label));
 
         const oHelp = el("button", "info-btn", "؟");
-        oHelp.title = "توضیحِ این گزینه";
+        oHelp.title = T("optHelp");
         oHelp.addEventListener("click", () => showOptionHelp(cat, opt));
         title.append(oHelp);
 
         // «از قبل نصب است» باید دیده شود، نه اینکه فقط دکمه خاموش باشد.
         // کاربر درست گفت: «چیزی نمی‌گوید که نصب است و نمی‌خواهد نصب کنی».
-        if (installed) title.append(el("span", "badge-installed", "از قبل نصب است"));
-        if (!opt.verified) title.append(el("span", "warn-tag", "نصبش آزمایش‌نشده"));
-        if (blocked) title.append(el("span", "warn-tag", `اول لازم است: ${opt.missingRequirements.join("، ")}`));
+        if (installed) title.append(el("span", "badge-installed", T("installed")));
+        if (!opt.verified) title.append(el("span", "warn-tag", T("unverified")));
+        if (blocked) title.append(el("span", "warn-tag", `${T("needsFirst")}: ${opt.missingRequirements.join("، ")}`));
 
         body.append(title);
         body.append(el("div", "why", opt.evidence));
@@ -773,16 +949,16 @@
         o.append(body);
 
         const acts = el("div", "acts");
-        const goBtn = el("button", "go", "نصب کن");
+        const goBtn = el("button", "go", T("install"));
         goBtn.disabled = installed || blocked || !termReady;
         goBtn.title = !termReady
-          ? "تا ترمینال وصل نشود، فرمان اجرا نمی‌شود"
-          : installed ? "از قبل نصب است" : blocked ? "اول پیش‌نیازش را نصب کن" : "";
+          ? T("termNotReady")
+          : installed ? T("installed") : blocked ? T("needPrereq") : "";
         goBtn.addEventListener("click", () => decide("apply", path, opt.id, opt.label, goBtn));
 
-        const undoBtn = el("button", "undo", "بردار");
+        const undoBtn = el("button", "undo", T("remove"));
         undoBtn.disabled = !installed || !termReady;
-        if (!termReady) undoBtn.title = "تا ترمینال وصل نشود، فرمان اجرا نمی‌شود";
+        if (!termReady) undoBtn.title = T("termNotReady");
         undoBtn.addEventListener("click", () => decide("revert", path, opt.id, opt.label, undoBtn));
 
         acts.append(goBtn, undoBtn);
@@ -816,20 +992,20 @@
    */
   function askAndScaffold(path) {
     let nameInput;
-    modal("ساختِ اسکلتِ پروژه", (b) => {
-      b.append(el("p", "lead", "چند فایلِ پایه ساخته می‌شود و یک مخزنِ گیت راه می‌افتد. هیچ تکنولوژی‌ای انتخاب نمی‌شود — آن‌ها را بعداً خودت می‌زنی."));
-      b.append(el("h4", null, "مسیر"));
+    modal(T("makeModal"), (b) => {
+      b.append(el("p", "lead", T("makeLead")));
+      b.append(el("h4", null, T("path")));
       b.append(el("div", "mono", path));
-      b.append(el("h4", null, "نامِ نمایشیِ پروژه (اختیاری)"));
+      b.append(el("h4", null, T("displayName")));
       nameInput = document.createElement("input");
       nameInput.type = "text";
-      nameInput.placeholder = "پیش‌فرض: نامِ خودِ پوشه";
+      nameInput.placeholder = T("namePlaceholder");
       nameInput.style.cssText = "width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)";
       b.append(nameInput);
     }, {
       actions: [
-        { label: "بساز", primary: true, onClick: () => doScaffold(path, nameInput ? nameInput.value.trim() : "") },
-        { label: "بی‌خیال" },
+        { label: T("create"), primary: true, onClick: () => doScaffold(path, nameInput ? nameInput.value.trim() : "") },
+        { label: T("cancel") },
       ],
     });
   }
@@ -844,18 +1020,18 @@
       const r = await res.json();
 
       if (!r.ok) {
-        modal("ساخته نشد", (b) => {
+        modal(T("notCreated"), (b) => {
           b.append(el("p", "lead", r.error));
-          b.append(el("div", null, "اگر پوشه خالی نیست، ابزار عمداً دست نمی‌زند تا کارِ موجود پاک نشود."));
+          b.append(el("div", null, T("notCreatedNote")));
         }, { danger: true });
         return;
       }
 
-      toast("✓ اسکلتِ پروژه ساخته شد", `${r.files.length} فایل — ${r.git.committed ? "گیت راه افتاد و کامیتِ پایه زده شد" : "گیت راه نیفتاد"}`);
+      toast(T("scaffolded"), `${r.files.length} ${T("files")} — ${r.git.committed ? T("gitOk") : T("gitNo")}`);
       load();
       loadDecisions();
     } catch (err) {
-      modal("درخواست به سرور نرسید", (b) => b.append(el("p", "lead", err.message)), { danger: true });
+      modal(T("serverUnreachable"), (b) => b.append(el("p", "lead", err.message)), { danger: true });
     }
   }
 
@@ -864,7 +1040,7 @@
     const host = $("decisions");
     if (!path) { host.textContent = ""; return; }
     try {
-      const r = await fetch("/api/stack?path=" + encodeURIComponent(path));
+      const r = await fetch("/api/stack?lang=" + LANG + "&path=" + encodeURIComponent(path));
       const data = await r.json();
       if (!data.ok) { host.textContent = ""; return; }
       renderDecisions(path, data.stack, data.freshness);
@@ -876,10 +1052,10 @@
   async function load() {
     const path = $("path").value.trim();
     const out = $("out");
-    if (!path) { out.textContent = ""; out.append(el("div", "empty", "مسیرِ یک پوشه را بده.")); return; }
+    if (!path) { out.textContent = ""; out.append(el("div", "empty", T("pathNeeded"))); return; }
 
     out.textContent = "";
-    out.append(el("div", "empty", "در حالِ بررسی…"));
+    out.append(el("div", "empty", T("checking")));
     try {
       const r = await fetch("/api/probe?path=" + encodeURIComponent(path));
       const data = await r.json();
@@ -892,6 +1068,17 @@
   }
 
   $("go").addEventListener("click", () => { load(); loadDecisions(); });
+
+  // تعویضِ زبان: انتخاب ذخیره می‌شود و صفحه از نو با همان زبان ساخته می‌شود.
+  $("langBtn").addEventListener("click", () => {
+    LANG = LANG === "fa" ? "en" : "fa";
+    localStorage.setItem(LANG_KEY, LANG);
+    applyLang();
+    load();
+    loadDecisions();
+  });
+
+  applyLang();
   $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") { load(); loadDecisions(); } });
 
   let timer = null;
@@ -944,8 +1131,8 @@
       ws.send(JSON.stringify({ type: "resize", cols: term.cols, rows: term.rows }));
       fetch("/api/terminal-info")
         .then((r) => r.json())
-        .then((d) => setTermStatus(true, `ترمینالِ واقعی — ${d.shell || "پاورشل"}`))
-        .catch(() => setTermStatus(true, "ترمینالِ واقعی"));
+        .then((d) => setTermStatus(true, `${LANG === "en" ? "Live terminal" : "ترمینالِ واقعی"} — ${d.shell || "pwsh"}`))
+        .catch(() => setTermStatus(true, LANG === "en" ? "Live terminal" : "ترمینالِ واقعی"));
     });
 
     ws.addEventListener("message", (e) => {
