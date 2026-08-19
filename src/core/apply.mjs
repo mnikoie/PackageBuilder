@@ -611,7 +611,9 @@ export async function applyTechnology({
       if (dryRun) continue;
       const dest = join(projectPath, step.path);
       if (existsSync(dest)) {
-        performed.push({ kind: "writeFile", path: step.path, skipped: "از قبل بود، دست نزدم" });
+        // فایلِ جای‌نگه‌دار: فقط برای وقتی است که هنوز چیزی نساخته باشد. اگر
+        // فریم‌ورکِ واقعی از قبل ساخته باشدش، ردشدن از رویش خبرِ گفتنی نیست.
+        performed.push({ kind: "writeFile", path: step.path, skipped: "از قبل بود، دست نزدم", placeholder: !!step.placeholder });
       } else {
         mkdirSync(dirname(dest), { recursive: true });
         writeFileSync(dest, step.content, "utf8");
@@ -813,7 +815,7 @@ export async function applyTechnology({
   // اجرای واقعی دیده شد: قالبِ Vite فایلِ App.css داشت و چون ویندوز بزرگ و
   // کوچکِ حروف را یکی می‌بیند، فایلِ Tailwind هرگز نوشته نشد.
   const skippedFiles = performed
-    .filter((x) => x.kind === "writeFile" && x.skipped)
+    .filter((x) => x.kind === "writeFile" && x.skipped && !x.placeholder)
     .map((x) => `${x.path} از قبل وجود داشت و دست‌نخورده ماند — اگر محتوایش را لازم داری، خودت نگاهش کن.`);
 
   return {

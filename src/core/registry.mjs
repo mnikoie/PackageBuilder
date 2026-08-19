@@ -1292,7 +1292,7 @@ export const TECHNOLOGIES = [
       verified: true,
       steps: [
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
-        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg, placeholder: true },
         { kind: "writeFile", path: "apps/api/src/logger.js", content: PINO_LOGGER },
         { kind: "writeFile", path: "apps/api/src/sentry.js", content: SENTRY_INIT },
         { kind: "cli", command: "pnpm --filter api add pino @sentry/node" },
@@ -1353,7 +1353,7 @@ export const TECHNOLOGIES = [
       verified: true,
       steps: [
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
-        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg, placeholder: true },
         { kind: "writeFile", path: "apps/api/openapi.yaml", content: OPENAPI_YAML },
         { kind: "writeFile", path: "apps/api/redocly.yaml", content: REDOCLY_YAML },
         { kind: "cli", command: "pnpm --filter api add -D @redocly/cli" },
@@ -1374,7 +1374,7 @@ export const TECHNOLOGIES = [
       verified: true,
       steps: [
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
-        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg, placeholder: true },
         { kind: "writeFile", path: "apps/api/src/trpc.js", content: TRPC_ROUTER },
         { kind: "cli", command: "pnpm --filter api add @trpc/server zod" },
       ],
@@ -1394,7 +1394,7 @@ export const TECHNOLOGIES = [
       verified: true,
       steps: [
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
-        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg, placeholder: true },
         { kind: "writeFile", path: "apps/api/src/graphql.js", content: GRAPHQL_SERVER },
         { kind: "cli", command: "pnpm --filter api add graphql graphql-yoga" },
         { kind: "env", vars: { GRAPHQL_PORT: "4001" } },
