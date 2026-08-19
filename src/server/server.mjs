@@ -30,6 +30,7 @@ import pty from "node-pty";
 
 import { probeProject } from "../core/detect.mjs";
 import { scaffoldProject } from "../core/scaffold.mjs";
+import { finishSteps } from "../core/finish.mjs";
 import { resolveRegistry } from "../core/resolve.mjs";
 import { validateRegistry } from "../core/registry.mjs";
 import { applyTechnology, revertTechnology } from "../core/apply.mjs";
@@ -278,6 +279,18 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
         return sendJson(res, 200, { ok: true, stack: resolveRegistry(probe.path, { probe, lang }), freshness: registryFreshness() });
       } catch (err) {
         return sendJson(res, 500, { ok: false, error: `خطا در بررسی: ${err.message}` });
+      }
+    }
+
+    if (url.pathname === "/api/finish") {
+      const target = (url.searchParams.get("path") || "").trim();
+      if (!target) return sendJson(res, 400, { ok: false, error: "مسیرِ پوشه داده نشده." });
+      try {
+        const probe = probeProject(target);
+        if (!probe.exists || !probe.isDirectory) return sendJson(res, 200, { ok: false, error: probe.error });
+        return sendJson(res, 200, { ok: true, steps: finishSteps(probe.path, probe) });
+      } catch (err) {
+        return sendJson(res, 500, { ok: false, error: `خطا: ${err.message}` });
       }
     }
 

@@ -251,6 +251,26 @@
     padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;
     background: var(--accent); color: #fff; border: none;
   }
+  .step { border: 1px solid var(--border); border-radius: 10px; background: var(--panel); margin-bottom: 8px; padding: 10px 12px; }
+  .step.done { opacity: .55; border-color: #23482f; }
+  .step .shead { display: flex; align-items: center; gap: 8px; }
+  .step .stitle { font-weight: 700; flex: 1; }
+  .step .swhy { color: var(--muted); font-size: .78rem; margin: 4px 0 8px; }
+  .step pre {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px;
+    margin: 0 0 8px; overflow-x: auto; font-family: Consolas, monospace; font-size: .76rem;
+    direction: ltr; text-align: left; white-space: pre-wrap; word-break: break-all;
+  }
+  .step .sacts { display: flex; gap: 6px; align-items: center; }
+  .step .sacts button {
+    padding: 4px 12px; font-size: .74rem; font-weight: 600; cursor: pointer; border-radius: 6px;
+    border: 1px solid var(--border); background: transparent; color: var(--text);
+  }
+  .step .sacts button.run { border-color: var(--accent); color: var(--accent); }
+  .step .sacts button:disabled { opacity: .4; cursor: not-allowed; }
+  .step .sacts label { color: var(--muted); font-size: .74rem; display: flex; align-items: center; gap: 4px; cursor: pointer; }
+  .step .manual-tag { font-size: .68rem; padding: 1px 7px; border-radius: 20px; background: var(--maybe-bg); color: var(--maybe); }
+
   .stale-bar {
     border: 1px solid var(--maybe); background: var(--maybe-bg); color: var(--maybe);
     border-radius: 10px; padding: 9px 14px; margin-bottom: 12px; font-size: .8rem;
@@ -283,6 +303,7 @@
 
     <div id="makeHost"></div>
     <div id="decisions"></div>
+    <div id="finish"></div>
     <div id="out"></div>
 
     <div class="ro" id="footNote"></div>
@@ -381,6 +402,13 @@
       gitNo: "گیت راه نیفتاد",
       stale: "⚠ فهرستِ تکنولوژی‌ها بعد از راه‌اندازیِ سرور عوض شده. برای دیدنِ گزینه‌های نو، سرور را ری‌استارت کن.",
       termNotReady: "تا ترمینال وصل نشود، فرمان اجرا نمی‌شود",
+      finishTitle: "قدم‌های پایانی — از «نصب شد» تا «بالا آمد»",
+      copy: "کپی",
+      runIt: "اجرا در ترمینال",
+      doneMark: "انجام شد",
+      manualStep: "دستی",
+      copied: "کپی شد",
+      allDone: "همه‌چیز آماده است — چیزی نمانده.",
       needPrereq: "اول پیش‌نیازش را نصب کن",
     },
     en: {
@@ -453,6 +481,13 @@
       gitNo: "git did not start",
       stale: "⚠ The technology list changed after the server started. Restart the server to see the new options.",
       termNotReady: "commands do not run until the terminal is connected",
+      finishTitle: "Final steps — from installed to running",
+      copy: "Copy",
+      runIt: "Run in terminal",
+      doneMark: "done",
+      manualStep: "manual",
+      copied: "copied",
+      allDone: "Everything is ready — nothing left to do.",
       needPrereq: "install its prerequisite first",
     },
   };
@@ -805,6 +840,7 @@
       openGroup = groupOf(techId);
       stackCache.clear(); // وضعیت عوض شده؛ کشِ کهنه دیگر مدرک نیست
       loadDecisions();
+      loadFinish();
       load();
     }
   }
@@ -1040,6 +1076,104 @@
   const stackCache = new Map();
   const cacheKey = (path, lang) => lang + "|" + path;
 
+  // ------------------------------------------------------ قدم‌های پایانی
+  //
+  // انتخابِ تکنولوژی پروژه را آماده می‌کند، ولی هنوز اجرا نمی‌شود: .env واقعی
+  // ساخته نشده، کلیدها خالی‌اند، سرویس‌ها بالا نیامده‌اند. این بخش همان
+  // فاصله را پر می‌کند — و هیچ‌چیز را خودکار اجرا نمی‌کند.
+
+  const doneKey = (path) => "pb-done|" + path;
+  const readDone = (path) => {
+    try { return new Set(JSON.parse(localStorage.getItem(doneKey(path)) || "[]")); } catch { return new Set(); }
+  };
+  const writeDone = (path, set) => localStorage.setItem(doneKey(path), JSON.stringify([...set]));
+
+  function renderFinish(path, steps) {
+    const host = $("finish");
+    host.textContent = "";
+    if (!steps.length) return;
+
+    const marked = readDone(path);
+    const children = [];
+
+    for (const st of steps) {
+      const isDone = st.done || marked.has(st.id);
+      const box = el("div", "step" + (isDone ? " done" : ""));
+
+      const head = el("div", "shead");
+      head.append(el("span", "chip " + (isDone ? "ok" : "no"), isDone ? "✓" : "✗"));
+      head.append(el("span", "stitle", st.title));
+      if (st.manual) head.append(el("span", "manual-tag", T("manualStep")));
+      box.append(head);
+
+      box.append(el("div", "swhy", st.why));
+
+      const pre = document.createElement("pre");
+      pre.textContent = st.command;
+      box.append(pre);
+
+      const acts = el("div", "sacts");
+
+      const copyBtn = el("button", null, T("copy"));
+      copyBtn.addEventListener("click", async () => {
+        try { await navigator.clipboard.writeText(st.command); toast(T("copied"), st.title); } catch { /* بی‌اهمیت */ }
+      });
+      acts.append(copyBtn);
+
+      const runBtn = el("button", "run", T("runIt"));
+      runBtn.disabled = !termReady;
+      if (!termReady) runBtn.title = T("termNotReady");
+      runBtn.addEventListener("click", async () => {
+        runBtn.disabled = true;
+        try {
+          await fetch("/api/run", {
+            method: "POST",
+            headers: { "Content-Type": "application/json", "x-pb-token": TOKEN },
+            body: JSON.stringify({ command: st.command }),
+          });
+        } catch (err) {
+          modal(T("serverUnreachable"), (b) => b.append(el("p", "lead", err.message)), { danger: true });
+        } finally {
+          runBtn.disabled = false;
+        }
+      });
+      acts.append(runBtn);
+
+      // علامتِ دستی — برای قدم‌هایی که مدرکِ خودکار ندارند (مثلِ پر کردنِ کلید).
+      const label = document.createElement("label");
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = marked.has(st.id);
+      cb.addEventListener("change", () => {
+        const set = readDone(path);
+        if (cb.checked) set.add(st.id); else set.delete(st.id);
+        writeDone(path, set);
+        loadFinish();
+      });
+      label.append(cb, document.createTextNode(T("doneMark")));
+      acts.append(label);
+
+      box.append(acts);
+      children.push(box);
+    }
+
+    host.append(card(T("finishTitle"), children));
+  }
+
+  async function loadFinish() {
+    const path = $("path").value.trim();
+    const host = $("finish");
+    if (!path) { host.textContent = ""; return; }
+    try {
+      const r = await fetch("/api/finish?path=" + encodeURIComponent(path));
+      const data = await r.json();
+      if (!data.ok) { host.textContent = ""; return; }
+      renderFinish(path, data.steps);
+    } catch {
+      host.textContent = "";
+    }
+  }
+
   async function loadDecisions({ useCache = false } = {}) {
     const path = $("path").value.trim();
     const host = $("decisions");
@@ -1081,7 +1215,7 @@
     }
   }
 
-  $("go").addEventListener("click", () => { stackCache.clear(); load(); loadDecisions().then(prefetchOtherLang); });
+  $("go").addEventListener("click", () => { stackCache.clear(); load(); loadFinish(); loadDecisions().then(prefetchOtherLang); });
 
   /** زبانِ دیگر را بی‌صدا می‌گیریم تا تعویض بعداً فوری باشد. */
   async function prefetchOtherLang() {
@@ -1105,6 +1239,7 @@
     // اگر این زبان قبلاً گرفته شده، همان لحظه رندر می‌شود؛ وگرنه یک درخواستِ
     // سبک. گزارشِ probe اصلاً دوباره گرفته نمی‌شود — متنش عوض نمی‌شود.
     await loadDecisions({ useCache: true });
+    loadFinish();
   });
 
   applyLang();
@@ -1218,7 +1353,7 @@
 
   // مسیر در آدرسِ صفحه هم قابلِ دادن است: /?path=...
   const fromUrl = new URLSearchParams(location.search).get("path");
-  if (fromUrl) { $("path").value = fromUrl; load(); loadDecisions().then(prefetchOtherLang); }
+  if (fromUrl) { $("path").value = fromUrl; load(); loadFinish(); loadDecisions().then(prefetchOtherLang); }
 </script>
 </body>
 </html>
