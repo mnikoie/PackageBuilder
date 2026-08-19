@@ -15,7 +15,7 @@
  */
 
 import { existsSync, readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 /** متغیرهای env که مقدارشان خالی مانده — یعنی کلیدی که باید خودت پر کنی. */
 function emptyEnvVars(projectPath) {
@@ -77,8 +77,14 @@ function scriptCommand(projectPath, name, appList) {
   const withScript = appList.filter((a) => scriptsOf(join(projectPath, "apps", a, "package.json"))[name]);
   if (!withScript.length) return null;
 
-  if (hasTurbo) return `${pm} exec turbo run ${name}`;
-  if (hasNx) return `${pm} exec nx run-many -t ${name}`;
+  if (hasTurbo) {
+    const bin = localBin(projectPath, "turbo");
+    return bin ? `${bin} run ${name}` : `${pm} exec turbo run ${name}`;
+  }
+  if (hasNx) {
+    const bin = localBin(projectPath, "nx");
+    return bin ? `${bin} run-many -t ${name}` : `${pm} exec nx run-many -t ${name}`;
+  }
 
   // بی ابزارِ مونوریپو، هر app را جدا صدا می‌زنیم
   return withScript.map((a) => `${pm} --filter ${a} run ${name}`).join("; ");
@@ -92,8 +98,14 @@ function scriptCommand(projectPath, name, appList) {
  */
 function multiScriptCommand(projectPath, names, appList) {
   const pm = existsSync(join(projectPath, "pnpm-lock.yaml")) ? "pnpm" : "npm";
-  if (existsSync(join(projectPath, "turbo.json"))) return `${pm} exec turbo run ${names.join(" ")}`;
-  if (existsSync(join(projectPath, "nx.json"))) return `${pm} exec nx run-many -t ${names.join(",")}`;
+  if (existsSync(join(projectPath, "turbo.json"))) {
+    const bin = localBin(projectPath, "turbo");
+    return bin ? `${bin} run ${names.join(" ")}` : `${pm} exec turbo run ${names.join(" ")}`;
+  }
+  if (existsSync(join(projectPath, "nx.json"))) {
+    const bin = localBin(projectPath, "nx");
+    return bin ? `${bin} run-many -t ${names.join(",")}` : `${pm} exec nx run-many -t ${names.join(",")}`;
+  }
 
   const parts = [];
   for (const name of names) {
@@ -101,6 +113,19 @@ function multiScriptCommand(projectPath, names, appList) {
     if (one) parts.push(one);
   }
   return parts.length ? parts.join("; ") : null;
+}
+
+/**
+ * فرمانِ اجرای یک ابزارِ محلی (turbo / nx).
+ *
+ * اگر باینری‌اش در node_modules/.bin باشد مستقیم صدا زده می‌شود تا ترمینالِ
+ * واقعی به آن برسد و نمای تعاملی‌اش کار کند؛ وگرنه از مدیرِ پکیج.
+ */
+function localBin(projectPath, name) {
+  const win = existsSync(join(projectPath, "node_modules", ".bin", `${name}.CMD`));
+  const nix = existsSync(join(projectPath, "node_modules", ".bin", name));
+  if (win || nix) return `.${sep}node_modules${sep}.bin${sep}${name}`;
+  return null;
 }
 
 /** appهایی که پوشه‌شان هست. */
