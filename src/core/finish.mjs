@@ -48,6 +48,42 @@ function composeServices(projectPath) {
   return out;
 }
 
+/** اسکریپت‌های یک package.json — اگر نبود یا خراب بود، خالی. */
+function scriptsOf(file) {
+  if (!existsSync(file)) return {};
+  try {
+    return JSON.parse(readFileSync(file, "utf8")).scripts || {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * فرمانی که واقعاً همین اسکریپت را اجرا می‌کند — یا null اگر جایی وجود ندارد.
+ *
+ * نگارشِ اول همیشه `pnpm run build` روی ریشه می‌زد، ولی ریشه‌ای که با
+ * `npm init -y` ساخته شده اصلاً اسکریپتِ build ندارد و فرمان با
+ * [ERR_PNPM_NO_SCRIPT] می‌شکست. حالا سه جا را به ترتیب نگاه می‌کنیم: خودِ
+ * ریشه، ابزارِ مونوریپو، و بعد appها.
+ */
+function scriptCommand(projectPath, name, appList) {
+  const pm = existsSync(join(projectPath, "pnpm-lock.yaml")) ? "pnpm" : "npm";
+  const rootScripts = scriptsOf(join(projectPath, "package.json"));
+  if (rootScripts[name]) return `${pm} run ${name}`;
+
+  // مونوریپو: ابزارش همهٔ appها را با هم می‌سازد
+  const hasTurbo = existsSync(join(projectPath, "turbo.json"));
+  const hasNx = existsSync(join(projectPath, "nx.json"));
+  const withScript = appList.filter((a) => scriptsOf(join(projectPath, "apps", a, "package.json"))[name]);
+  if (!withScript.length) return null;
+
+  if (hasTurbo) return `${pm} exec turbo run ${name}`;
+  if (hasNx) return `${pm} exec nx run-many -t ${name}`;
+
+  // بی ابزارِ مونوریپو، هر app را جدا صدا می‌زنیم
+  return withScript.map((a) => `${pm} --filter ${a} run ${name}`).join("; ");
+}
+
 /** appهایی که پوشه‌شان هست. */
 function apps(projectPath) {
   const dir = join(projectPath, "apps");
@@ -138,25 +174,27 @@ export function finishSteps(projectPath, probe) {
     });
   }
 
-  // ۶) سنجشِ سلامت
-  if (has("package.json")) {
+  // ۶) سنجشِ سلامت — فقط اگر اسکریپتِ build جایی واقعاً وجود داشته باشد
+  const buildCmd = scriptCommand(projectPath, "build", appList);
+  if (buildCmd) {
     steps.push({
       id: "check",
       title: "بررسیِ سالم‌بودن",
-      why: "قبل از اجرا یک‌بار بیلد و تست بگیر تا اگر چیزی نیمه‌کاره مانده همین‌جا معلوم شود.",
-      command: `cd "${projectPath}"; ${has("pnpm-lock.yaml") ? "pnpm" : "npm"} run build`,
+      why: "قبل از اجرا یک‌بار بیلد بگیر تا اگر چیزی نیمه‌کاره مانده همین‌جا معلوم شود.",
+      command: `cd "${projectPath}"; ${buildCmd}`,
       done: false,
       manual: true,
     });
   }
 
-  // ۷) اجرا
-  if (nodeApps.length) {
+  // ۷) اجرا — همان منطق: فرمانی که وجود ندارد پیشنهاد نمی‌شود
+  const devCmd = scriptCommand(projectPath, "dev", appList) || scriptCommand(projectPath, "start", appList);
+  if (devCmd) {
     steps.push({
       id: "dev",
       title: "اجرای برنامه",
       why: "آخرین قدم: بالا بیاورش و در مرورگر ببین.",
-      command: `cd "${projectPath}"; ${has("pnpm-lock.yaml") ? "pnpm" : "npm"} run dev`,
+      command: `cd "${projectPath}"; ${devCmd}`,
       done: false,
       manual: true,
     });
