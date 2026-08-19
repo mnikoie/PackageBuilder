@@ -19,7 +19,7 @@ import { join } from "node:path";
 
 import {
   PRESENT, ABSENT, UNKNOWN,
-  detectNpmPackage, detectNodeModules, detectPythonVenv,
+  detectNpmPackage, detectNodeModules, detectPythonVenv, detectMonorepoTool,
 } from "./detect.mjs";
 import { CATEGORIES, TECHNOLOGIES } from "./registry.mjs";
 
@@ -89,6 +89,16 @@ export function evaluateDetect(projectPath, spec, ctx = {}) {
 
     case "npmRoot":
       return detectNpmPackage(projectPath, { name: spec.name });
+
+    // «فقط pnpm workspaces»: وجودِ فایل کافی نیست — pnpm ۱۱ همین فایل را
+    // برای تنظیماتش هم می‌سازد. معیار، داشتنِ بخشِ packages است.
+    case "pnpmWorkspacePackages": {
+      const res = detectMonorepoTool(projectPath);
+      if (res.toolId === "pnpm-workspaces") return present(res.evidence);
+      if (res.state === UNKNOWN) return unknown(res.evidence);
+      if (res.toolId) return absent(`مونوریپو هست ولی با ${res.tool}، نه pnpm workspaces خالی`);
+      return absent(res.evidence);
+    }
 
     case "npmInstalled":
       return detectNodeModules(projectPath, resolveRole(projectPath, spec.role).app);

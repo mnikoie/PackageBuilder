@@ -113,6 +113,18 @@ const EXPRESS_APP = minimalApp("api", "src/main.js", [
   "",
 ]);
 
+const FASTIFY_APP = minimalApp("api", "src/main.js", [
+  'import Fastify from "fastify";',
+  "",
+  "const app = Fastify({ logger: true });",
+  "const port = Number(process.env.API_PORT ?? 4000);",
+  "",
+  'app.get("/health", async () => ({ ok: true }));',
+  "",
+  'app.listen({ port, host: "127.0.0.1" });',
+  "",
+]);
+
 const WORKER_APP = minimalApp("worker", "src/main.js", [
   'import { Worker } from "bullmq";',
   "",
@@ -297,6 +309,27 @@ export const TECHNOLOGIES = [
       cons: ["پیچیده‌تر و سنگین‌تر", "یادگیریِ بیشتری می‌خواهد"],
     },
   },
+  {
+    id: "pnpm-workspaces",
+    category: "monorepoTool",
+    label: "فقط pnpm workspaces",
+    requires: ["pnpm"],
+    // وجودِ فایل کافی نیست: pnpm ۱۱ همین فایل را برای تنظیماتش هم می‌سازد.
+    // این مدرک وجودِ بخشِ packages را می‌خواهد.
+    detect: { kind: "pnpmWorkspacePackages" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "mkdir", path: "apps" },
+        { kind: "cli", command: "pnpm install" },
+      ],
+    },
+    meta: {
+      pros: ["هیچ ابزارِ اضافه‌ای لازم ندارد", "ساده و قابلِ فهم", "برای چند appِ کم کافی است"],
+      cons: ["کشِ بیلد و اجرای موازی ندارد", "با بزرگ‌شدنِ پروژه کند می‌شود"],
+    },
+  },
 
   // ----------------------------------------------------- فریم‌ورکِ فرانت
   {
@@ -344,6 +377,31 @@ export const TECHNOLOGIES = [
 
   // ---------------------------------------------------- فریم‌ورکِ بک‌اند
   {
+    id: "vite-react",
+    category: "frontendFramework",
+    label: "Vite + React (SPA)",
+    requires: ["pnpm"],
+    // مدرک عمداً @vitejs/plugin-react است، نه خودِ vite: React Router هم روی
+    // Vite می‌نشیند، پس «vite نصب است» هر دو گزینه را سبز می‌کرد و یک دسته
+    // به‌دروغ «هر دو نصب» می‌شد. آزموده شد: قالبِ React Router این پلاگین را
+    // ندارد (پلاگینِ خودش را دارد).
+    detect: { kind: "npm", role: "web", name: "@vitejs/plugin-react" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "mkdir", path: "apps" },
+        { kind: "cli", command: "npx --yes create-vite@latest apps/web --no-interactive --template react-ts" },
+        { kind: "cli", command: "pnpm install" },
+        { kind: "env", vars: { VITE_API_URL: "http://localhost:4000" } },
+      ],
+    },
+    meta: {
+      pros: ["ساده‌ترین راه برای یک برنامهٔ تک‌صفحه‌ای", "devِ خیلی سریع", "بی‌قاعدهٔ تحمیلی — هر کتابخانه‌ای را می‌شود چسباند"],
+      cons: ["رندرِ سمتِ سرور ندارد — برای SEO باید خودت کاری کنی", "روتینگ و داده‌گیری را خودت باید بچینی"],
+    },
+  },
+  {
     id: "nestjs",
     category: "backendFramework",
     label: "NestJS",
@@ -384,6 +442,29 @@ export const TECHNOLOGIES = [
     meta: {
       pros: ["سبک و ساده", "آزادیِ کامل در طراحی", "رایج‌ترین"],
       cons: ["ساختار را خودت باید بسازی", "در پروژهٔ بزرگ بی‌نظم می‌شود"],
+    },
+  },
+  {
+    id: "fastify",
+    category: "backendFramework",
+    label: "Fastify",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "api", name: "fastify" },
+    apply: {
+      verified: true,
+      steps: [
+        // مثلِ Express: اسکافولدرِ رسمیِ غیرتعاملی ندارد، پس کمترین appِ ممکن
+        // را خودمان می‌سازیم (استثنای مستندِ تصمیمِ ۰۰۰۳).
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/api/package.json", content: FASTIFY_APP.pkg },
+        { kind: "writeFile", path: "apps/api/src/main.js", content: FASTIFY_APP.code },
+        { kind: "cli", command: "pnpm --filter api add fastify" },
+        { kind: "env", vars: { API_PORT: "4000" } },
+      ],
+    },
+    meta: {
+      pros: ["از Express سریع‌تر است", "اعتبارسنجیِ ورودی و لاگِ درست‌وحسابی در خودش دارد", "مدلِ پلاگینیِ مرتب"],
+      cons: ["جامعهٔ کوچک‌تر از Express", "میان‌افزارهای Express همیشه مستقیم کار نمی‌کنند"],
     },
   },
 
@@ -673,8 +754,14 @@ export const REMOVALS = {
 
   turborepo: { steps: [{ kind: "cli", command: "pnpm remove -D turbo" }, { kind: "deleteFile", path: "turbo.json" }] },
   nx: { steps: [{ kind: "cli", command: "pnpm remove -D nx" }, { kind: "deleteFile", path: "nx.json" }] },
+  "pnpm-workspaces": {
+    manual: "فایلِ pnpm-workspace.yaml ممکن است تنظیماتِ دیگرِ pnpm را هم داشته باشد (مثلِ allowBuilds). خودت نگاهش کن و فقط بخشِ packages را بردار.",
+  },
 
   "react-router-v7": {
+    manual: "این یک پوشهٔ کاملِ app ساخته (apps/web). حذفش یعنی پاک‌کردنِ کدی که ممکن است رویش کار کرده باشی — خودت تصمیم بگیر و خودت پاکش کن.",
+  },
+  "vite-react": {
     manual: "این یک پوشهٔ کاملِ app ساخته (apps/web). حذفش یعنی پاک‌کردنِ کدی که ممکن است رویش کار کرده باشی — خودت تصمیم بگیر و خودت پاکش کن.",
   },
   nextjs: {
@@ -684,6 +771,7 @@ export const REMOVALS = {
     manual: "این یک پوشهٔ کاملِ app ساخته (apps/api). حذفش یعنی پاک‌کردنِ کدت — خودت تصمیم بگیر و خودت پاکش کن.",
   },
   express: { steps: [{ kind: "cli", command: "pnpm --filter api remove express" }] },
+  fastify: { steps: [{ kind: "cli", command: "pnpm --filter api remove fastify" }] },
   bullmq: { steps: [{ kind: "cli", command: "pnpm --filter worker remove bullmq ioredis" }] },
 
   // سرویس‌های Docker: اول خوابانده می‌شوند، بعد از فایلِ compose حذف می‌شوند
@@ -716,7 +804,8 @@ export const manualRemovalTechnologies = () =>
 // ---------------------------------------------------------------- اعتبارسنجی
 
 const DETECT_KINDS = new Set([
-  "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "envVar", "all", "any",
+  "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "envVar",
+  "pnpmWorkspacePackages", "all", "any",
 ]);
 const APPLY_KINDS = new Set(["cli", "env", "file", "composeService", "writeFile", "pnpmWorkspace", "pnpmAddDev", "pnpmAdd", "mkdir"]);
 const REMOVE_KINDS = new Set(["cli", "deleteFile", "composeDown"]);
