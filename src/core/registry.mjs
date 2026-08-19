@@ -59,6 +59,9 @@ const WORKSPACE_YAML = [
 const TURBO_JSON = JSON.stringify(
   {
     $schema: "https://turborepo.com/schema.json",
+    // نمای تعاملی: فهرستِ کارها با تیکِ زندهٔ هرکدام. پیش‌فرضِ turbo ۲ حالتِ
+    // «stream» است که همه‌چیز را پشتِ‌سرِ هم می‌ریزد و دنبال‌کردنش سخت است.
+    ui: "tui",
     tasks: {
       build: { dependsOn: ["^build"], outputs: ["dist/**", "build/**", ".next/**"] },
       lint: {},
