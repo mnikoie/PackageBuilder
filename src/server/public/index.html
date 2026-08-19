@@ -552,6 +552,15 @@
     return out;
   }
 
+  /** گروهِ یک گزینه — برای باز نگه‌داشتنِ همان گروه بعد از نصب. */
+  let lastStack = null;
+  const groupOf = (techId) => {
+    for (const c of (lastStack ? lastStack.categories : [])) {
+      if (c.options.some((o) => o.id === techId)) return c.id;
+    }
+    return null;
+  };
+
   let busy = false;
 
   /** یک تصمیم را اعمال یا برمی‌گرداند. فرمان‌ها در ترمینالِ کنار دیده می‌شوند. */
@@ -615,6 +624,8 @@
       busy = false;
       btn.textContent = original;
       btn.disabled = false;
+      // بعد از نصب، همان گروه باز بماند و بقیه بسته.
+      openGroup = groupOf(techId);
       loadDecisions();
       load();
     }
@@ -691,9 +702,11 @@
     });
   }
 
-  const openGroups = new Set();
+  // فقط یک گروه در هر لحظه باز است.
+  let openGroup = null;
 
   function renderDecisions(path, stack, freshness) {
+    lastStack = stack;
     const host = $("decisions");
     host.textContent = "";
 
@@ -782,12 +795,13 @@
       // ساخته می‌شود، هر گروهی که باز بوده باز می‌ماند — وگرنه کاربر جایش را
       // گم می‌کند.
       const isFirst = host.querySelectorAll(".group").length === 0;
-      const open = openGroups.has(cat.id) || (isFirst && openGroups.size === 0);
+      const open = openGroup ? openGroup === cat.id : isFirst;
       if (!open) box.classList.add("closed");
       head.addEventListener("click", () => {
-        box.classList.toggle("closed");
-        if (box.classList.contains("closed")) openGroups.delete(cat.id);
-        else openGroups.add(cat.id);
+        const wasClosed = box.classList.contains("closed");
+        for (const g of host.querySelectorAll(".group")) g.classList.add("closed");
+        if (wasClosed) { box.classList.remove("closed"); openGroup = cat.id; }
+        else openGroup = null;
       });
 
       host.append(box);
