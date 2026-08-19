@@ -8,6 +8,7 @@
     "node": ">=20"
   },
   "scripts": {
+    "start": "node src/cli.mjs serve",
     "pb": "node src/cli.mjs",
     "test": "node --test \"tests/**/*.test.mjs\"",
     "e2e": "playwright test --config playwright.config.mjs"

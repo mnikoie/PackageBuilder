@@ -1,102 +1,129 @@
 # PackageBuilder
 
-ابزارِ لوکالِ ساختِ پروژه. یک پوشهٔ خالی می‌گیرد و قدم‌به‌قدم — با انتخابِ
-خودت، زیرِ نظرِ خودت — تبدیلش می‌کند به یک پروژهٔ آمادهٔ کار.
+**A local tool that turns an empty folder into a working project — one decision at a time, and never lies about what is installed.**
 
-## چرا از صفر نوشته می‌شود
+[فارسی](README.fa.md)
 
-نسخهٔ قبلیِ این ابزار روی یک قالبِ آمادهٔ تک‌استک ساخته شده بود و بعد سعی
-می‌کرد عمومی شود. نتیجه: پوشهٔ نوساخته از همان اول پُر بود از تصمیم‌هایی که
-کاربر نگرفته بود، و صفحهٔ وضعیت چیزهایی را «نصب» نشان می‌داد که نصب نبودند.
+![PackageBuilder UI](docs/images/screenshot.png)
 
-این‌بار از سرِ دیگر شروع می‌شود: **پوشه از یک اسکلتِ مستقل از تکنولوژی آغاز
-می‌شود، و هر تکنولوژی فقط وقتی وارد می‌شود که خودت انتخابش کرده باشی.**
+---
 
-## خودبسنده
+## What it does
 
-این ابزار به هیچ پوشه، پروژه، یا مسیرِ خاصی وابسته نیست. کلِ پوشه‌اش را هر
-جا ببری، کار می‌کند. `tests/independence.test.mjs` این را اجبار می‌کند، نه
-فقط ادعا: مسیرِ مطلق، نامِ پروژهٔ همسایه، و وابستگیِ بیرونِ فهرستِ سفید، همه
-باعثِ قرمزشدنِ تست می‌شوند.
+You point it at a folder. It shows you a list of decisions — language, package manager, frontend, backend, database, and so on — with the real options for each. You pick one and press a button. The tool runs the technology's own official CLI in a real terminal you can watch, and adds the small amount of glue that no CLI does for you: environment variables, ports, service wiring, and a written record of the decision.
 
-وابستگی‌ها پنج موردند: چهار تا برای ترمینالِ واقعی (`node-pty`, `ws`,
-`@xterm/xterm`, `@xterm/addon-fit`) و یکی برای تستِ مرورگر
-(`@playwright/test`). قدم‌های ۲ تا ۴ صفر وابستگی داشتند.
+Every decision can be undone.
 
-## امنیت
+## The idea behind it
 
-سرور می‌تواند فرمان اجرا کند، یعنی دسترسیِ کاملِ این کامپیوتر. «فقط لوکال
-است» کافی نیست، چون هر تبِ مرورگری که باز باشد می‌تواند به `127.0.0.1`
-درخواست بفرستد. پس چهار لایه:
+Most scaffolding tools tell you what *should* be installed by reading a config file. That is not the same as what *is* installed. A package name in `package.json` does not mean the package is on disk. A service in `docker-compose.yml` does not mean the container is running.
 
-| لایه | چه چیزی را می‌بندد |
+PackageBuilder only reports what it can prove, and it has **three** answers, not two:
+
+| | meaning |
 |---|---|
-| فقط `127.0.0.1` | دسترسی از شبکه |
-| فقط `POST` | حملهٔ `<img src=...>` و لینکِ ساده |
-| توکنِ تصادفیِ هر-اجرا، فقط داخلِ صفحهٔ خودمان | صفحهٔ بیگانه نمی‌تواند بخواندش |
-| بررسیِ `Origin` | درخواستِ آمده از مبدأِ دیگر |
+| ✓ | we found proof it is there — a folder in `node_modules`, a line in `docker compose ps`, a real `.venv` |
+| ✗ | we found proof it is not there |
+| ? | we could not check (Docker was down, a file was unreadable) |
 
-## وضعیت
+"Unknown" is never quietly turned into "yes" or "no". That single distinction is the reason this tool exists.
 
-**هر هشت قدم تمام شد.** ابزار کار می‌کند: یک پوشهٔ خالی می‌گیرد، و با کلیک
-تبدیلش می‌کند به پروژه‌ای با سرویس‌های واقعیِ کارکننده — و می‌تواند پسشان بگیرد.
+## Rules it follows
 
-**هر ۳۶ تکنولوژی واقعاً اجرا و تأیید شده** — هر کدام یک‌بار روی پوشهٔ خالی،
-با سنجشِ مدرکِ واقعی. همین آزمایش هفت باگ بیرون کشید که تستِ خودکار نمی‌گرفت
-(شرحشان در [`docs/ROADMAP.md`](docs/ROADMAP.md)).
+- **No claim without proof.** Presence in a config file is not proof.
+- **Nothing runs hidden.** Every command runs in a real PowerShell terminal in the page, with its full output.
+- **Nothing is imposed.** A technology's files appear only after you choose it. A fresh project contains no framework, no database, no build tool.
+- **Everything is reversible.** Whatever can be installed can be removed, and it stays in the list afterwards so you can install it again.
+- **Your work is never overwritten.** If a file already exists, the tool leaves it alone and tells you.
 
-نقشهٔ راه: [`docs/ROADMAP.md`](docs/ROADMAP.md)
+## Quick start
 
-## استفاده
+Requires Node.js 20+, and Docker Desktop if you want database or search services.
 
 ```bash
-# ساختِ پروژهٔ نو — فقط بگو چه می‌سازی، چیزی نساز
-node src/cli.mjs new ./my-app --dry-run
-
-# ساختِ واقعی
-node src/cli.mjs new ./my-app --name "My App"
-
-# گزارشِ وضعیتِ واقعیِ یک پروژه
-node src/cli.mjs probe ./my-app
-
-# تصمیم‌های پروژه و گزینه‌هایشان، با وضعیتِ واقعیِ هر گزینه
-node src/cli.mjs stack ./my-app
-
-# اعمالِ یک تصمیم — فرمان‌ها در ترمینالِ واقعی دیده می‌شوند
-node src/cli.mjs apply ./my-app --tech postgres
-node src/cli.mjs apply ./my-app --tech postgres --dry-run
-
-# پس‌گرفتنش
-node src/cli.mjs revert ./my-app --tech postgres
-
-# رابطِ کاربری + ترمینالِ واقعی (فقط روی 127.0.0.1)
-node src/cli.mjs serve
-
-# تست‌ها
-npm test      # ۲۱۴ تست، چند ثانیه
-npm run e2e   # ۷ تستِ مرورگرِ واقعی
+npm install
+npm start
 ```
 
-`new` روی پوشهٔ پُر **امتناع** می‌کند و دست نمی‌زند.
-`probe` هیچ‌چیزی نمی‌نویسد و سه حالت را تفکیک می‌کند:
+Then open `http://127.0.0.1:4600`.
 
-| علامت | معنا |
+There is also a command line:
+
+```bash
+node src/cli.mjs new ./my-app --name "My App"   # create the skeleton
+node src/cli.mjs probe ./my-app                 # real status, read-only
+node src/cli.mjs stack ./my-app                 # decisions and options
+node src/cli.mjs apply ./my-app --tech postgres # apply one decision
+node src/cli.mjs revert ./my-app --tech postgres
+```
+
+On Windows, `start-server.bat` and `stop-server.bat` are there for convenience.
+
+## What you can choose
+
+15 categories, 37 technologies. Every one of them has been installed for real on an empty folder and verified with actual evidence — not assumed to work.
+
+| Category | Options |
 |---|---|
-| `✓` | مدرک دیدیم که هست |
-| `✗` | مدرک دیدیم که نیست |
-| `؟` | **نتوانستیم بپرسیم** — مثلاً Docker بالا نبود |
+| Language / runtime | Node.js · Python |
+| Package manager | pnpm · npm |
+| Repository structure | Turborepo · Nx · plain pnpm workspaces |
+| Frontend | React Router v7 · Next.js · Vite + React |
+| Styling | Tailwind CSS · Bootstrap |
+| Backend | NestJS · Express · Fastify |
+| API style | REST + OpenAPI · tRPC · GraphQL |
+| AI / Persian text service | Python + FastAPI · Node.js |
+| Authentication | Clerk · Auth.js |
+| Background jobs | BullMQ · Celery |
+| Database | PostgreSQL · MySQL · MongoDB · MariaDB · SQLite |
+| Search | Meilisearch · Elasticsearch |
+| File storage | MinIO · S3 |
+| Logging & monitoring | Sentry + pino · self-hosted Grafana/Loki/Prometheus |
+| End-to-end testing | Playwright · Cypress |
 
-آن `؟` مهم‌ترین بخشِ کار است. نسخهٔ قبلیِ ابزار این حالت را نداشت و «نتوانستم
-بپرسم» را «نصب است» ترجمه می‌کرد — ریشهٔ همهٔ سبزهای دروغین.
+Adding a new technology is a row of data, not a change to the engine.
 
-## قواعدِ سختِ این ابزار
+## Security
 
-این‌ها قابلِ مذاکره نیستند و دلیلِ وجودِ این بازنویسی‌اند — شرحِ کاملشان در
-[`docs/decisions/0001-purpose-and-rules.md`](docs/decisions/0001-purpose-and-rules.md):
+The server can run commands, so it is treated as sensitive even though it is local:
 
-1. **بی‌مدرک ادعا نکن.** «نصب است» فقط با مدرکِ واقعی. مدرک نداری؟ بنویس نامعلوم.
-2. **هیچ چیزی پنهان اجرا نشود.** هر دستور در یک ترمینالِ واقعیِ قابلِ دیدن.
-3. **هیچ تصمیمی تحمیل نشود.** فایلِ یک تکنولوژی، فقط بعد از انتخابِ آن.
-4. **هر کاری دو طرفه باشد.** هر چیزی که نصب می‌شود، باید قابلِ حذف باشد.
-5. **قبل از گفتنِ «انجام شد»، تست شده باشد** — از جمله حالتِ خالی و خطا.
-6. **خودبسنده باش.** هیچ وابستگی به پوشه، پروژه، یا مسیرِ خاصی.
+- binds to `127.0.0.1` only
+- accepts `POST` only for anything that acts
+- requires a per-run random token that is injected into its own page, so another site cannot read it
+- checks the request `Origin` against the `Host`
+
+## How it is built
+
+Node.js, no build step. `node-pty` for the real terminal, `xterm.js` to show it, `ws` for the bridge, and the plain `node:http` server. The UI is a single HTML file — edit it and refresh.
+
+```
+src/
+  cli.mjs            command line
+  core/
+    scaffold.mjs     creates the technology-neutral skeleton
+    detect.mjs       three-state detection, read-only
+    registry.mjs     the 15 categories and 37 technologies — data, not code
+    resolve.mjs      evaluates evidence against a real project
+    apply.mjs        applying and reverting decisions
+  server/
+    server.mjs       http + websocket + the security layers
+    terminal.mjs     a real, long-lived PowerShell
+    public/index.html  the whole UI
+```
+
+## Tests
+
+```bash
+npm test      # 214 unit tests
+npm run e2e   # 10 browser tests against a real server
+```
+
+The end-to-end tests do not settle for what the page says: they run `docker ps` themselves and execute `pg_isready` inside the container. A green test is meant to be evidence, not decoration.
+
+## Status
+
+Working and in daily use. Windows is the tested platform; the terminal layer is PowerShell-based, so Linux and macOS support is not there yet.
+
+## License
+
+Not licensed for redistribution yet — see the repository owner.
