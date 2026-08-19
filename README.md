@@ -14,6 +14,12 @@ You point it at a folder. It shows you a list of decisions — language, package
 
 Every decision can be undone.
 
+When the decisions are made, the tool lists what is still between you and a
+running app — creating the real `.env`, filling in service keys, installing
+dependencies, building the Python environment, starting the containers,
+building, and running. Each step shows its exact command, and nothing runs on
+its own.
+
 ## The idea behind it
 
 Most scaffolding tools tell you what *should* be installed by reading a config file. That is not the same as what *is* installed. A package name in `package.json` does not mean the package is on disk. A service in `docker-compose.yml` does not mean the container is running.
@@ -27,6 +33,16 @@ PackageBuilder only reports what it can prove, and it has **three** answers, not
 | ? | we could not check (Docker was down, a file was unreadable) |
 
 "Unknown" is never quietly turned into "yes" or "no". That single distinction is the reason this tool exists.
+
+## In the browser
+
+- Every decision group explains itself: what it settles, why it matters, and how
+  the options differ.
+- Every option has a panel showing its evidence, its trade-offs, **the exact
+  commands an install will run**, and how removal works. That text is generated
+  from the same data the engine uses, so it cannot drift from the truth.
+- Persian and English, switched with one button.
+- A real PowerShell sits beside the page. Every command runs there, visible.
 
 ## Rules it follows
 
