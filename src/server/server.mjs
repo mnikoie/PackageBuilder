@@ -27,7 +27,6 @@ import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { WebSocketServer } from "ws";
 import pty from "node-pty";
-import { spawn } from "node:child_process";
 
 import { probeProject } from "../core/detect.mjs";
 import { scaffoldProject } from "../core/scaffold.mjs";
@@ -234,7 +233,6 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
     const url = new URL(req.url, `http://${host}:${port}`);
 
     if (req.method === "POST" && url.pathname === "/api/run") return handleRun(req, res);
-    if (req.method === "POST" && url.pathname === "/api/run-window") return handleRunWindow(req, res);
     if (req.method === "POST" && url.pathname === "/api/new") return handleNew(req, res);
     if (req.method === "POST" && url.pathname === "/api/apply") return handleDecision(req, res, "apply");
     if (req.method === "POST" && url.pathname === "/api/revert") return handleDecision(req, res, "revert");
@@ -305,36 +303,6 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
 
   // ---- پُلِ WebSocket بینِ ترمینالِ واقعی و مرورگر ----
   // noServer است تا خودمان قبلِ ارتقا، توکن و مبدأ را بررسی کنیم.
-  /**
-   * همان فرمان، ولی در پنجرهٔ کنسولِ جدا.
-   *
-   * برای ابزارهایی که نمای تمام‌صفحه دارند (مثلِ turbo) لازم است: ترمینالِ
-   * داخلِ صفحه آن نما را روشن نمی‌کند. پنجره با `/k` باز می‌ماند تا خروجی
-   * بعد از پایان هم دیده شود.
-   */
-  async function handleRunWindow(req, res) {
-    if (!originAllowed(req)) return sendJson(res, 403, { ok: false, error: "مبدأِ درخواست پذیرفته نشد." });
-    if (!tokenMatches(token, req.headers["x-pb-token"])) return sendJson(res, 401, { ok: false, error: "توکن نامعتبر است." });
-
-    let body;
-    try { body = await readJsonBody(req); } catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
-
-    const command = typeof body.command === "string" ? body.command.trim() : "";
-    if (!command) return sendJson(res, 400, { ok: false, error: "فرمانی داده نشد." });
-
-    try {
-      const child = spawn("cmd.exe", ["/c", "start", "", "cmd.exe", "/k", `pwsh -NoLogo -NoProfile -Command "${command.replace(/"/g, '\\"')}"`], {
-        detached: true,
-        stdio: "ignore",
-        windowsVerbatimArguments: true,
-      });
-      child.unref();
-      return sendJson(res, 200, { ok: true });
-    } catch (err) {
-      return sendJson(res, 500, { ok: false, error: `پنجره باز نشد: ${err.message}` });
-    }
-  }
-
   /**
    * ساختِ اسکلتِ پروژهٔ نو — همان کاری که فرمانِ `new` می‌کند.
    *
