@@ -305,7 +305,7 @@ const CELERY_TASKS = [
   "",
   "from celery import Celery",
   "",
-  'broker = os.environ.get("CELERY_BROKER_URL", "redis://localhost:6379/0")',
+  'broker = os.environ.get("CELERY_BROKER_URL", "redis://127.0.0.1:6379/0")',
   'app = Celery("worker", broker=broker, backend=broker)',
   "",
   "",
@@ -392,7 +392,7 @@ const PROMETHEUS_YML = [
 const WORKER_APP = minimalApp("worker", "src/main.js", [
   'import { Worker } from "bullmq";',
   "",
-  'const connection = { url: process.env.REDIS_URL ?? "redis://localhost:6379" };',
+  'const connection = { url: process.env.REDIS_URL ?? "redis://127.0.0.1:6379" };',
   "",
   '// یک کارگرِ نمونه. نامِ صفِ واقعیِ خودت را جای "demo" بگذار.',
   'new Worker("demo", async (job) => {',
@@ -487,6 +487,18 @@ export const CATEGORIES = [
  * دامنهٔ دورِ اول عمداً محدود است: در هر دسته دو گزینه، تا ماشین واقعاً
  * امتحان شود (انتخاب، تعویض، تشخیصِ ناسازگاری). با یک گزینه هیچ ثابت نمی‌شد.
  * رسیدن به سه-چهار گزینه، بعدش فقط «یک ردیف اضافه کن» است.
+ */
+/**
+ * چرا آدرس‌های سرویس 127.0.0.1 است و نه localhost:
+ *
+ * Node از نگارشِ ۱۸ به بعد اول IPv6 را امتحان می‌کند، و روی ویندوز نگاشتِ
+ * IPv6ِ Docker همیشه جواب نمی‌دهد. نتیجه در ساختِ یک اپِ واقعی دیده شد:
+ * `postgresql://...@localhost:5433/app` تایم‌اوت می‌شد در حالی که همان آدرس با
+ * 127.0.0.1 بی‌درنگ وصل می‌شد — یعنی آدرسی که خودِ ابزار داده بود کار نمی‌کرد.
+ *
+ * آدرس‌هایی که **مرورگر** مصرفشان می‌کند (مثلِ VITE_API_URL) عمداً localhost
+ * مانده‌اند: مرورگر هر دو خانواده را امتحان می‌کند و localhost برای آدرسی که
+ * کاربر می‌بیند خواناتر است.
  */
 export const TECHNOLOGIES = [
   // ---------------------------------------------------------------- زبان
@@ -782,7 +794,7 @@ export const TECHNOLOGIES = [
         { kind: "writeFile", path: "apps/worker/package.json", content: WORKER_APP.pkg },
         { kind: "writeFile", path: "apps/worker/src/main.js", content: WORKER_APP.code },
         { kind: "cli", command: "pnpm --filter worker add bullmq ioredis" },
-        { kind: "env", vars: { REDIS_URL: "redis://localhost:6379" } },
+        { kind: "env", vars: { REDIS_URL: "redis://127.0.0.1:${REDIS_PORT}" } },
         { kind: "composeService", service: "redis", image: "redis:7-alpine", ports: [{ container: 6379, host: 6379, env: "REDIS_PORT" }], volume: "/data" },
       ],
     },
@@ -816,7 +828,7 @@ export const TECHNOLOGIES = [
         { kind: "writeFile", path: "apps/worker-py/tasks.py", content: CELERY_TASKS },
         { kind: "cli", command: "python -m venv apps/worker-py/.venv" },
         { kind: "cli", command: "apps/worker-py/.venv/Scripts/python -m pip install -r apps/worker-py/requirements.txt" },
-        { kind: "env", vars: { CELERY_BROKER_URL: "redis://localhost:6379/0" } },
+        { kind: "env", vars: { CELERY_BROKER_URL: "redis://127.0.0.1:${REDIS_PORT}/0" } },
         // مثلِ BullMQ، بروکرش را هم خودش می‌آورد — وگرنه «نصب شد» یعنی چیزی
         // که اجرا نمی‌شود.
         { kind: "composeService", service: "redis", image: "redis:7-alpine", ports: [{ container: 6379, host: 6379, env: "REDIS_PORT" }], volume: "/data" },
@@ -843,7 +855,7 @@ export const TECHNOLOGIES = [
           environment: { POSTGRES_USER: "app", POSTGRES_PASSWORD: "change-me", POSTGRES_DB: "app" },
           volume: "/var/lib/postgresql/data",
         },
-        { kind: "env", vars: { DATABASE_URL: "postgresql://app:change-me@localhost:5432/app" } },
+        { kind: "env", vars: { DATABASE_URL: "postgresql://app:change-me@127.0.0.1:${POSTGRES_PORT}/app" } },
       ],
     },
     meta: {
@@ -864,7 +876,7 @@ export const TECHNOLOGIES = [
           environment: { MYSQL_ROOT_PASSWORD: "change-me", MYSQL_DATABASE: "app" },
           volume: "/var/lib/mysql",
         },
-        { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@localhost:3306/app" } },
+        { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@127.0.0.1:${MYSQL_PORT}/app" } },
       ],
     },
     meta: {
@@ -891,7 +903,7 @@ export const TECHNOLOGIES = [
         },
         // authSource=admin لازم است: کاربرِ ریشه در دیتابیسِ admin ساخته می‌شود،
         // نه در دیتابیسِ app. بی آن، ورود رد می‌شود.
-        { kind: "env", vars: { MONGO_URL: "mongodb://app:change-me@localhost:27017/app?authSource=admin" } },
+        { kind: "env", vars: { MONGO_URL: "mongodb://app:change-me@127.0.0.1:${MONGO_PORT}/app?authSource=admin" } },
       ],
     },
     meta: {
@@ -912,7 +924,7 @@ export const TECHNOLOGIES = [
           environment: { MARIADB_ROOT_PASSWORD: "change-me", MARIADB_DATABASE: "app", MARIADB_USER: "app", MARIADB_PASSWORD: "change-me" },
           volume: "/var/lib/mysql",
         },
-        { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@localhost:3306/app" } },
+        { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@127.0.0.1:${MARIADB_PORT}/app" } },
       ],
     },
     meta: {
@@ -1221,7 +1233,7 @@ export const TECHNOLOGIES = [
           environment: { MEILI_MASTER_KEY: "change-me", MEILI_NO_ANALYTICS: '"true"' },
           volume: "/meili_data",
         },
-        { kind: "env", vars: { MEILI_URL: "http://localhost:7700", MEILI_MASTER_KEY: "change-me" } },
+        { kind: "env", vars: { MEILI_URL: "http://127.0.0.1:${MEILI_PORT}", MEILI_MASTER_KEY: "change-me" } },
       ],
     },
     meta: {
@@ -1243,7 +1255,7 @@ export const TECHNOLOGIES = [
           environment: { "discovery.type": "single-node", "xpack.security.enabled": '"false"', ES_JAVA_OPTS: "-Xms512m -Xmx512m" },
           volume: "/usr/share/elasticsearch/data",
         },
-        { kind: "env", vars: { ELASTIC_URL: "http://localhost:9200" } },
+        { kind: "env", vars: { ELASTIC_URL: "http://127.0.0.1:${ELASTIC_PORT}" } },
       ],
     },
     meta: {
@@ -1268,7 +1280,7 @@ export const TECHNOLOGIES = [
           environment: { MINIO_ROOT_USER: "app", MINIO_ROOT_PASSWORD: "change-me-min-8" },
           volume: "/data",
         },
-        { kind: "env", vars: { MINIO_ENDPOINT: "http://localhost:9000", MINIO_BUCKET: "app" } },
+        { kind: "env", vars: { MINIO_ENDPOINT: "http://127.0.0.1:${MINIO_PORT}", MINIO_BUCKET: "app" } },
       ],
     },
     meta: {

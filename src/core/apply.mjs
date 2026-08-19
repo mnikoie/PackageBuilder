@@ -522,6 +522,39 @@ export async function applyTechnology({
   const planned = [];
   const performed = [];
 
+  // پورت‌های این تکنولوژی یک‌بار و **پیش از** نوشتنِ هر آدرسی معلوم می‌شوند.
+  //
+  // چرا تنبل: فقط تکنولوژی‌هایی که سرویسِ Docker دارند به این نیاز دارند، و
+  // پرسیدنش یک فراخوانیِ docker است. چرا زودتر: مقدارِ env مثلِ
+  // `postgresql://...@localhost:${POSTGRES_PORT}/app` باید در همان لحظهٔ
+  // نوشته‌شدن پورتِ واقعی را داشته باشد. نگارشِ قبلی اول env را می‌نوشت و بعد
+  // پورت را انتخاب می‌کرد، پس آدرس با پورتِ پیش‌فرض می‌ماند در حالی که سرویس
+  // روی پورتِ دیگری بالا آمده بود.
+  let portsMemo = null;
+  const getPorts = () => {
+    if (portsMemo) return portsMemo;
+    const config = readConfig(projectPath);
+    const stack = { ...(config?.stack || {}), [tech.category]: techId };
+    const mine = composeServicesFor(stack).filter((svc) =>
+      tech.apply.steps.some((st) => st.kind === "composeService" && st.service === svc.service),
+    );
+    portsMemo = mine.length ? resolvePorts(mine) : { vars: {}, notes: [] };
+    return portsMemo;
+  };
+
+  /** `${VAR}` را با پورتِ واقعی جایگزین می‌کند؛ ناشناخته‌ها دست‌نخورده می‌مانند. */
+  const withRealPorts = (vars) => {
+    if (!Object.values(vars).some((v) => typeof v === "string" && v.includes("${"))) return vars;
+    const portVars = getPorts().vars;
+    const out = {};
+    for (const [k, v] of Object.entries(vars)) {
+      out[k] = typeof v === "string"
+        ? v.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (m, name) => portVars[name] ?? m)
+        : v;
+    }
+    return out;
+  };
+
   for (const step of tech.apply.steps) {
     if (step.kind === "mkdir") {
       // بعضی CLIهای رسمی توقع دارند پوشهٔ والد از قبل باشد. مثلاً
@@ -614,7 +647,10 @@ export async function applyTechnology({
     } else if (step.kind === "env") {
       planned.push({ kind: "env", vars: Object.keys(step.vars) });
       if (dryRun) continue;
-      performed.push({ kind: "env", ...applyEnvVars(projectPath, { techLabel: tech.label, vars: step.vars }) });
+      performed.push({
+        kind: "env",
+        ...applyEnvVars(projectPath, { techLabel: tech.label, vars: withRealPorts(step.vars) }),
+      });
     } else if (step.kind === "composeService") {
       planned.push({ kind: "composeService", service: step.service });
     } else if (step.kind === "file") {
@@ -631,10 +667,9 @@ export async function applyTechnology({
 
     // پورت‌ها: آزاد را پیدا کن و در env بنویس. هم در .env.example (نقشه) و هم
     // در .env (که خودِ Docker می‌خواندش) — وگرنه پیش‌فرضِ مشغول استفاده می‌شود.
-    const myServices = allServices.filter((s) =>
-      tech.apply.steps.some((st) => st.kind === "composeService" && st.service === s.service),
-    );
-    const ports = resolvePorts(myServices);
+    // (getPorts همان حافظه‌ای است که گامِ env هم از آن استفاده کرده، پس آدرس و
+    // پورتِ منتشرشده حتماً یکی‌اند.)
+    const ports = getPorts();
     if (Object.keys(ports.vars).length) {
       performed.push({ kind: "ports", ...ports });
       applyEnvVars(projectPath, { techLabel: `${tech.label} — پورت‌ها`, vars: ports.vars });
