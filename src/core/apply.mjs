@@ -214,6 +214,30 @@ export function findFreePort(from, { taken = new Set(), tries = 60 } = {}) {
   return null;
 }
 
+/**
+ * کدام متغیرهای پورت در `.env` مقداری دارند که همین حالا اشغال است.
+ *
+ * فقط وقتی جواب می‌دهد که فهرستِ پورت‌های Docker خوانده شده باشد؛ اگر
+ * نخوانده باشیم، چیزی «کهنه» اعلام نمی‌شود — نامعلوم به حکم ترجمه نمی‌شود.
+ */
+export function staleTakenPortVars(projectPath, vars, { run = defaultRun } = {}) {
+  const file = join(projectPath, ".env");
+  if (!existsSync(file)) return [];
+
+  const { known, ports } = dockerPublishedPorts(run);
+  if (!known) return [];
+
+  const text = readFileSync(file, "utf8");
+  const stale = [];
+  for (const [key, value] of Object.entries(vars)) {
+    const m = text.match(new RegExp(`^\\s*${key}\\s*=\\s*(\\d+)\\s*$`, "m"));
+    if (!m) continue;
+    const current = Number(m[1]);
+    if (current !== Number(value) && ports.has(current)) stale.push(key);
+  }
+  return stale;
+}
+
 /** پورت‌های آزاد برای سرویس‌های یک تکنولوژی، به‌صورتِ متغیرهای env. */
 export function resolvePorts(services, { run = defaultRun } = {}) {
   const { known, ports } = dockerPublishedPorts(run);
@@ -614,7 +638,11 @@ export async function applyTechnology({
     if (Object.keys(ports.vars).length) {
       performed.push({ kind: "ports", ...ports });
       applyEnvVars(projectPath, { techLabel: `${tech.label} — پورت‌ها`, vars: ports.vars });
-      writeDotEnvValues(projectPath, ports.vars);
+      // اگر مقدارِ قبلیِ .env حالا واقعاً اشغال است، اصلاحش کن. مرجع همان
+      // «چه پورت‌هایی گرفته‌اند»ِ خودِ Docker است، نه حدس.
+      const stale = staleTakenPortVars(projectPath, ports.vars);
+      writeDotEnvValues(projectPath, ports.vars, { force: stale });
+      if (stale.length) performed.push({ kind: "portsCorrected", vars: stale });
     }
 
     const composeRes = generateCompose(projectPath, {
@@ -780,7 +808,7 @@ export function removeEnvVars(projectPath, { techLabel, vars }) {
  *
  * `.env` در `.gitignore` است، پس در کامیت نمی‌آید (و نباید بیاید).
  */
-export function writeDotEnvValues(projectPath, vars) {
+export function writeDotEnvValues(projectPath, vars, { force = [] } = {}) {
   const file = join(projectPath, ".env");
   const existing = existsSync(file) ? readFileSync(file, "utf8") : "";
   const present = new Set();
@@ -788,7 +816,28 @@ export function writeDotEnvValues(projectPath, vars) {
     const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
     if (m) present.add(m[1]);
   }
+  // مقدارِ موجود عمداً دست نمی‌خورد (ممکن است کاربر خودش تنظیمش کرده باشد) —
+  // مگر اینکه فراخوان صریح بگوید این کلید باید اصلاح شود. تنها کاربردش الان
+  // پورتی است که **قابلِ اثبات** اشغال شده؛ نگه‌داشتنش یعنی نصبی که هر بار
+  // شکست می‌خورد. در اجرای واقعی دیده شد: پورتِ redis وقتی Docker خواب بود
+  // انتخاب و ذخیره شد، و بعد از برگشتنِ Docker همان مقدارِ کهنه استفاده
+  // می‌شد و کانتینر بالا نمی‌آمد.
+  const forced = new Set(force);
   const missing = Object.entries(vars).filter(([k]) => !present.has(k));
+  const overwrite = Object.entries(vars).filter(([k]) => present.has(k) && forced.has(k));
+
+  if (overwrite.length) {
+    let text = existing;
+    for (const [k, v] of overwrite) {
+      text = text.replace(new RegExp(`^\\s*${k}\\s*=.*$`, "m"), `${k}=${v}`);
+    }
+    if (text !== existing) {
+      writeFileSync(file, text, "utf8");
+      const after = missing.length ? writeDotEnvValues(projectPath, Object.fromEntries(missing)) : { added: [] };
+      return { changed: true, added: after.added, corrected: overwrite.map(([k]) => k) };
+    }
+  }
+
   if (missing.length === 0) return { changed: false, added: [] };
 
   const head = existing === "" ? "# مقدارهای واقعی. کامیت نمی‌شود.\n" : "";
@@ -884,12 +933,31 @@ export async function revertTechnology({ projectPath, techId, terminal, commit =
       performed.push({ kind: "cli", command: step.command, ok: res.ok });
       if (!res.ok) manualSteps.push(`این فرمان شکست خورد و باید دستی رسیدگی شود: ${step.command}`);
     } else if (step.kind === "composeDown") {
+      // «خواباندن» کافی نیست.
+      //
+      // نگارشِ قبلی فقط stop می‌زد. بعدش نامِ سرویس از فایلِ compose برداشته
+      // می‌شد و کانتینرِ خاموش **یتیم** می‌ماند: نه در فهرست بود، نه هیچ
+      // فرمانِ پاک‌سازیِ استانداردی پیدایش می‌کرد. با هر نصب-و-برگشت یکی
+      // اضافه می‌شد. در اجرای واقعی دیده شد (nextVersion.md بندِ ۱).
+      //
+      // پس: stop و بعد rm — و عمداً **بی** حذفِ volume. دادهٔ داخلِ دیتابیس
+      // مالِ کاربر است و پاک‌کردنش تصمیمِ او، نه ما. اگر بعداً همان سرویس را
+      // دوباره نصب کند، داده‌اش سرِ جایش است.
       const compose = join(projectPath, "deployment", "docker-compose.yml");
       if (existsSync(compose) && terminal) {
-        const res = await terminal.runAndWait(
-          `docker compose --env-file "${join(projectPath, ".env")}" -f "${compose}" stop ${step.service}`,
+        const envFile = join(projectPath, ".env");
+        const stopped = await terminal.runAndWait(
+          `docker compose --env-file "${envFile}" -f "${compose}" stop ${step.service}`,
         );
-        performed.push({ kind: "composeDown", service: step.service, ok: res.ok });
+        const removed = await terminal.runAndWait(
+          `docker compose --env-file "${envFile}" -f "${compose}" rm -f ${step.service}`,
+        );
+        performed.push({
+          kind: "composeDown",
+          service: step.service,
+          ok: stopped.ok && removed.ok,
+          removed: removed.ok,
+        });
       }
     } else if (step.kind === "deleteFile") {
       const target = join(projectPath, step.path);

@@ -766,7 +766,14 @@ export const TECHNOLOGIES = [
     category: "backgroundJobs",
     label: "BullMQ",
     requires: ["pnpm"],
-    detect: { kind: "npm", role: "worker", name: "bullmq" },
+    // همان منطقِ Celery: کارگرِ بی‌بروکر کار نمی‌کند.
+    detect: {
+      kind: "all",
+      of: [
+        { kind: "npm", role: "worker", name: "bullmq" },
+        { kind: "dockerService", service: "redis" },
+      ],
+    },
     apply: {
       verified: true,
       steps: [
@@ -790,9 +797,19 @@ export const TECHNOLOGIES = [
     label: "Celery",
     // مثلِ FastAPI: به تصمیمِ زبانِ پروژه کار ندارد، محیطِ خودش را می‌سازد.
 
-    detect: { kind: "pythonPackage", role: "worker-py", name: "celery" },
+    // مدرک هر دو تکه را می‌خواهد: خودِ celery و بروکرش. کارگری که بروکر
+    // نداشته باشد اجرا نمی‌شود، پس «نصب است» با دیدنِ تنها یکی‌شان دروغ است.
+    // در اجرای واقعی دیده شد: نصبِ نیمه‌تمام (پکیج بله، Redis نه) را «نصب
+    // است» گزارش کرد.
+    detect: {
+      kind: "all",
+      of: [
+        { kind: "pythonPackage", role: "worker-py", name: "celery" },
+        { kind: "dockerService", service: "redis" },
+      ],
+    },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
         { kind: "mkdir", path: "apps/worker-py" },
         { kind: "writeFile", path: "apps/worker-py/requirements.txt", content: CELERY_REQUIREMENTS },
@@ -1094,7 +1111,7 @@ export const TECHNOLOGIES = [
     label: "خودمیزبان (Grafana + Loki + Prometheus)",
     detect: { kind: "dockerService", service: "grafana" },
     apply: {
-      verified: false,
+      verified: true,
       steps: [
         { kind: "mkdir", path: "deployment" },
         { kind: "writeFile", path: "deployment/prometheus.yml", content: PROMETHEUS_YML },

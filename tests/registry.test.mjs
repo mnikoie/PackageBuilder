@@ -117,7 +117,7 @@ describe("سلامتِ رجیستری", () => {
       "react-router-v7", "nextjs", "vite-react", "tailwind",
       "nestjs", "express", "fastify", "bullmq",
       "fastapi", "node-ai-service",
-      "clerk", "authjs", "sentry-pino",
+      "clerk", "authjs", "sentry-pino", "grafana-stack", "celery",
       "postgres", "mysql", "mongodb", "mariadb", "sqlite",
       "rest-openapi", "trpc", "graphql",
       "meilisearch", "elasticsearch", "minio", "s3",
@@ -127,9 +127,10 @@ describe("سلامتِ رجیستری", () => {
     assert.deepEqual(verified.sort(), [...REALLY_TESTED].sort());
     assert.equal(unverifiedTechnologies().length, TECHNOLOGIES.length - REALLY_TESTED.length);
 
-    // این دو هنوز اجرا نشده‌اند چون Docker روی این سیستم بالا نیامد. عمداً
-    // اینجا نوشته شده‌اند تا «هنوز نه» فراموش نشود و به «هست» ترجمه نشود.
-    assert.deepEqual(unverifiedTechnologies().map((t) => t.id).sort(), ["celery", "grafana-stack"]);
+    // فعلاً هیچ‌کدام معلق نیست. اگر ردیفِ نویی بی‌اجرا اضافه شود، همین‌جا
+    // قرمز می‌شود — و آن‌وقت باید صریح نامش را اینجا بنویسی، نه اینکه
+    // خطِ زیر را پاک کنی.
+    assert.deepEqual(unverifiedTechnologies().map((t) => t.id), []);
   });
 
   test("کمکی‌های خواندن درست کار می‌کنند", () => {
