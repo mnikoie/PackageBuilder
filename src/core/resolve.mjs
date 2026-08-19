@@ -21,7 +21,7 @@ import {
   PRESENT, ABSENT, UNKNOWN,
   detectNpmPackage, detectNodeModules, detectPythonVenv, detectPythonPackage, detectMonorepoTool,
 } from "./detect.mjs";
-import { CATEGORIES, TECHNOLOGIES } from "./registry.mjs";
+import { CATEGORIES, TECHNOLOGIES, describeApply, describeRemoval } from "./registry.mjs";
 
 const present = (evidence) => ({ state: PRESENT, evidence });
 const absent = (evidence) => ({ state: ABSENT, evidence });
@@ -201,6 +201,10 @@ export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, t
           meta: t.meta,
           verified: !!t.apply?.verified,
           missingRequirements: missing,
+          // برای مودالِ راهنما در UI: دقیقاً همان کاری که انجام می‌شود.
+          installs: describeApply(t.id),
+          removal: describeRemoval(t.id),
+          requires: (t.requires || []).map((dep) => byId.get(dep)?.tech.label || dep),
         };
       });
 
@@ -211,6 +215,7 @@ export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, t
       id: cat.id,
       label: cat.label,
       question: cat.question,
+      description: cat.description || "",
       foundational: !!cat.foundational,
       options,
       chosen: hits.length === 1 ? hits[0].id : null,

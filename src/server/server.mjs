@@ -21,7 +21,7 @@
  */
 
 import { createServer } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, existsSync, statSync } from "node:fs";
 import { join, dirname, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { randomBytes, timingSafeEqual } from "node:crypto";
@@ -29,6 +29,7 @@ import { WebSocketServer } from "ws";
 import pty from "node-pty";
 
 import { probeProject } from "../core/detect.mjs";
+import { scaffoldProject } from "../core/scaffold.mjs";
 import { resolveRegistry } from "../core/resolve.mjs";
 import { validateRegistry } from "../core/registry.mjs";
 import { applyTechnology, revertTechnology } from "../core/apply.mjs";
@@ -39,6 +40,29 @@ const PUBLIC_DIR = join(HERE, "public");
 const NODE_MODULES = join(HERE, "..", "..", "node_modules");
 
 export const DEFAULT_PORT = 4600;
+
+/**
+ * زمانِ آخرین تغییرِ رجیستری، در برابرِ لحظه‌ای که سرور بالا آمد.
+ *
+ * چرا لازم است: Node ماژول‌ها را یک‌بار می‌خواند و در حافظه نگه می‌دارد. اگر
+ * ردیفِ نویی به رجیستری اضافه شود، سرورِ در حالِ اجرا آن را **نمی‌بیند** و
+ * صفحه بی‌آنکه کسی بفهمد نسخهٔ کهنه را نشان می‌دهد. این دو بار در عمل پیش آمد
+ * و هر دو بار وقت گرفت تا معلوم شود گزینه گم نشده، سرور کهنه است.
+ *
+ * پس به‌جای سکوت، صریح گزارش می‌شود و UI هشدار می‌دهد.
+ */
+const REGISTRY_FILE = fileURLToPath(new URL("../core/registry.mjs", import.meta.url));
+const SERVER_STARTED_AT = Date.now();
+
+export function registryFreshness() {
+  try {
+    const changedAt = statSync(REGISTRY_FILE).mtimeMs;
+    return { stale: changedAt > SERVER_STARTED_AT, changedAt, startedAt: SERVER_STARTED_AT };
+  } catch {
+    return { stale: false, changedAt: null, startedAt: SERVER_STARTED_AT };
+  }
+}
+
 
 /**
  * فایل‌های کتابخانه‌ای که سِرو می‌شوند — فهرستِ سفیدِ صریح، نه سِروِ پوشه.
@@ -208,6 +232,7 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
     const url = new URL(req.url, `http://${host}:${port}`);
 
     if (req.method === "POST" && url.pathname === "/api/run") return handleRun(req, res);
+    if (req.method === "POST" && url.pathname === "/api/new") return handleNew(req, res);
     if (req.method === "POST" && url.pathname === "/api/apply") return handleDecision(req, res, "apply");
     if (req.method === "POST" && url.pathname === "/api/revert") return handleDecision(req, res, "revert");
 
@@ -249,7 +274,7 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
       try {
         const probe = probeProject(target);
         if (!probe.exists || !probe.isDirectory) return sendJson(res, 200, { ok: false, error: probe.error });
-        return sendJson(res, 200, { ok: true, stack: resolveRegistry(probe.path, { probe }) });
+        return sendJson(res, 200, { ok: true, stack: resolveRegistry(probe.path, { probe }), freshness: registryFreshness() });
       } catch (err) {
         return sendJson(res, 500, { ok: false, error: `خطا در بررسی: ${err.message}` });
       }
@@ -264,6 +289,35 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
 
   // ---- پُلِ WebSocket بینِ ترمینالِ واقعی و مرورگر ----
   // noServer است تا خودمان قبلِ ارتقا، توکن و مبدأ را بررسی کنیم.
+  /**
+   * ساختِ اسکلتِ پروژهٔ نو — همان کاری که فرمانِ `new` می‌کند.
+   *
+   * تا پیش از این فقط در خط‌فرمان ممکن بود، و کاربر در UI راهی نداشت جز
+   * اینکه پوشه‌ای دستی بسازد و مستقیم پکیج نصب کند — یعنی پروژه‌ای بی
+   * project.config.json و بی گیت، که بعد ابزار درست می‌گفت «ساختهٔ
+   * PackageBuilder نیست» و کاربر گیج می‌شد.
+   */
+  async function handleNew(req, res) {
+    let body;
+    try { body = await readJsonBody(req); } catch (err) { return sendJson(res, 400, { ok: false, error: err.message }); }
+
+    const target = String(body.path || "").trim();
+    if (!target) return sendJson(res, 400, { ok: false, error: "مسیرِ پوشه داده نشده." });
+
+    try {
+      const result = scaffoldProject({
+        targetPath: target,
+        displayName: body.name ? String(body.name) : undefined,
+        slug: body.slug ? String(body.slug) : undefined,
+        dryRun: false,
+        initGit: body.initGit !== false,
+      });
+      return sendJson(res, 200, result);
+    } catch (err) {
+      return sendJson(res, 500, { ok: false, error: `ساخته نشد: ${err.message}` });
+    }
+  }
+
   const wss = new WebSocketServer({ noServer: true });
   const clients = new Set();
 

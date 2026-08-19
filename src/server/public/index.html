@@ -137,10 +137,120 @@
   .warn-line { color: var(--maybe); font-size: .8rem; padding: 4px 14px 10px; }
   .note { color: var(--muted); font-size: .78rem; padding: 4px 14px 10px; }
   .mono { font-family: Consolas, monospace; direction: ltr; unicode-bidi: plaintext; }
+  /* ---------------------------------------------------------- گروه‌بندی */
+  /*
+   * هر دسته یک کارتِ مستقل شد. قبلاً همه در یک کارتِ بلند پشتِ‌هم بودند و
+   * مرزِ گروه‌ها گم می‌شد — کاربر گفت «گروه‌بندی را شکیل کن».
+   */
+  .group { border: 1px solid var(--border); border-radius: 12px; background: var(--panel); margin-bottom: 12px; overflow: hidden; }
+  .group.settled { border-color: #23482f; }
+  .group > .ghead {
+    display: flex; align-items: center; gap: 10px; padding: 11px 14px;
+    background: var(--panel2); border-bottom: 1px solid var(--border);
+  }
+  .group > .ghead .gname { font-weight: 700; font-size: .95rem; }
+  .group > .ghead .gq { color: var(--muted); font-size: .76rem; flex: 1; min-width: 0; }
+  .group > .gbody { padding: 4px 0; }
+
+  .verdict-pill { font-size: .74rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
+  .verdict-pill.chosen { background: var(--ok-bg); color: var(--ok); }
+  .verdict-pill.none   { background: #22272e; color: var(--muted); }
+  .verdict-pill.clash  { background: var(--no-bg); color: var(--no); }
+  .verdict-pill.vague  { background: var(--maybe-bg); color: var(--maybe); }
+
+  /* دکمهٔ راهنما — گِرد و کم‌رنگ تا شلوغی نسازد */
+  .info-btn {
+    flex: 0 0 auto; width: 22px; height: 22px; border-radius: 50%; cursor: pointer;
+    border: 1px solid var(--border); background: transparent; color: var(--muted);
+    font-size: .74rem; font-weight: 700; line-height: 1; padding: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+  }
+  .info-btn:hover { color: var(--accent); border-color: var(--accent); }
+
+  .opt.installed { background: rgba(63,185,80,.05); }
+  .opt .badge-installed {
+    font-size: .7rem; font-weight: 700; padding: 2px 9px; border-radius: 20px;
+    background: var(--ok-bg); color: var(--ok); white-space: nowrap;
+  }
+
+  /* ------------------------------------------------------------- مودال */
+  .backdrop {
+    position: fixed; inset: 0; background: rgba(0,0,0,.66); z-index: 50;
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .modal {
+    background: var(--panel); border: 1px solid var(--border); border-radius: 14px;
+    max-width: 640px; width: 100%; max-height: 82vh; display: flex; flex-direction: column;
+    box-shadow: 0 18px 50px rgba(0,0,0,.5);
+  }
+  .modal > header {
+    display: flex; align-items: center; gap: 10px; padding: 14px 18px;
+    border-bottom: 1px solid var(--border);
+  }
+  .modal > header h3 { margin: 0; font-size: 1rem; flex: 1; }
+  .modal > header .x {
+    background: transparent; border: none; color: var(--muted); font-size: 1.3rem;
+    cursor: pointer; line-height: 1; padding: 0 4px;
+  }
+  .modal > header .x:hover { color: var(--text); }
+  .modal > .mbody { padding: 16px 18px; overflow-y: auto; }
+  .modal > footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-start; }
+  .modal footer button {
+    padding: 7px 18px; border-radius: 8px; cursor: pointer; font-weight: 600;
+    border: 1px solid var(--border); background: transparent; color: var(--text);
+  }
+  .modal footer button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .modal.danger > header { color: var(--no); }
+
+  .modal .lead { margin: 0 0 14px; line-height: 1.9; }
+  .modal h4 { margin: 16px 0 6px; font-size: .82rem; color: var(--muted); font-weight: 700; }
+  .modal h4:first-child { margin-top: 0; }
+  .modal ul { margin: 0; padding-inline-start: 20px; }
+  .modal li { margin: 3px 0; }
+  .modal li.plus::marker { color: var(--ok); }
+  .modal li.minus::marker { color: var(--no); }
+  .modal .kv { display: flex; gap: 8px; padding: 3px 0; font-size: .84rem; }
+  .modal .kv .k { color: var(--muted); min-width: 96px; }
+  .modal pre {
+    background: #0d1117; border: 1px solid var(--border); border-radius: 8px;
+    padding: 10px 12px; overflow-x: auto; margin: 6px 0 0;
+    font-family: Consolas, monospace; font-size: .78rem; direction: ltr; text-align: left;
+  }
+
+  /* -------------------------------------------------------------- توست */
+  #toasts { position: fixed; inset-block-end: 18px; inset-inline-end: 18px; z-index: 60; display: flex; flex-direction: column; gap: 8px; }
+  .toast {
+    background: var(--panel); border: 1px solid var(--border); border-inline-start: 4px solid var(--ok);
+    border-radius: 10px; padding: 10px 14px; max-width: 380px; box-shadow: 0 8px 24px rgba(0,0,0,.45);
+    animation: slidein .18s ease-out;
+  }
+  .toast.warn { border-inline-start-color: var(--maybe); }
+  .toast .t-title { font-weight: 700; font-size: .84rem; }
+  .toast .t-text { color: var(--muted); font-size: .78rem; margin-top: 2px; }
+  @keyframes slidein { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  /* --------------------------------------------------- نوارِ ساختِ پروژه */
+  .make {
+    border: 1px dashed var(--accent); border-radius: 12px; padding: 14px;
+    background: rgba(47,129,247,.06); margin-bottom: 14px;
+  }
+  .make .mtitle { font-weight: 700; margin-bottom: 4px; }
+  .make .mtext { color: var(--muted); font-size: .8rem; margin-bottom: 10px; }
+  .make button {
+    padding: 8px 16px; border-radius: 8px; cursor: pointer; font-weight: 600;
+    background: var(--accent); color: #fff; border: none;
+  }
+  .stale-bar {
+    border: 1px solid var(--maybe); background: var(--maybe-bg); color: var(--maybe);
+    border-radius: 10px; padding: 9px 14px; margin-bottom: 12px; font-size: .8rem;
+  }
+
   .ro { margin-top: 22px; color: var(--muted); font-size: .76rem; border-top: 1px solid var(--border); padding-top: 12px; }
 </style>
 </head>
 <body>
+
+<div id="toasts"></div>
 
 <div class="layout">
   <div class="left">
@@ -195,6 +305,79 @@
     return n;
   };
 
+  // ------------------------------------------------------ مودال و توست
+  //
+  // چرا alert کنار گذاشته شد: alert کلِ مرورگر را قفل می‌کند، متنِ بلند را بد
+  // نشان می‌دهد، و برای موفقیتِ ساده هم مزاحم است. حالا:
+  //   • خطا و هشدار → مودال (باید دیده و بسته شود)
+  //   • موفقیت      → توست (خودش می‌رود، جلوی کار را نمی‌گیرد)
+
+  let openModal = null;
+
+  function closeModal() {
+    if (openModal) { openModal.remove(); openModal = null; }
+  }
+
+  /**
+   * مودال. `build` بدنه را می‌سازد تا هر جور محتوایی بشود گذاشت.
+   */
+  function modal(title, build, { danger = false, actions = null } = {}) {
+    closeModal();
+    const back = el("div", "backdrop");
+    const box = el("div", "modal" + (danger ? " danger" : ""));
+
+    const head = document.createElement("header");
+    head.append(el("h3", null, title));
+    const x = el("button", "x", "×");
+    x.setAttribute("aria-label", "بستن");
+    x.addEventListener("click", closeModal);
+    head.append(x);
+
+    const body = el("div", "mbody");
+    build(body);
+
+    const foot = document.createElement("footer");
+    if (actions) {
+      for (const a of actions) {
+        const b = el("button", a.primary ? "primary" : null, a.label);
+        b.addEventListener("click", () => { closeModal(); a.onClick && a.onClick(); });
+        foot.append(b);
+      }
+    } else {
+      const b = el("button", "primary", "فهمیدم");
+      b.addEventListener("click", closeModal);
+      foot.append(b);
+    }
+
+    box.append(head, body, foot);
+    back.append(box);
+    back.addEventListener("click", (e) => { if (e.target === back) closeModal(); });
+    document.body.append(back);
+    openModal = back;
+    return back;
+  }
+
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeModal(); });
+
+  /** پیامِ کوتاهِ موفقیت. خودش بعد از چند ثانیه می‌رود. */
+  function toast(title, text, { warn = false, ms = 6000 } = {}) {
+    const t = el("div", "toast" + (warn ? " warn" : ""));
+    t.append(el("div", "t-title", title));
+    if (text) t.append(el("div", "t-text", text));
+    $("toasts").append(t);
+    setTimeout(() => t.remove(), ms);
+  }
+
+  /** فهرستِ ساده در مودال. */
+  function bullets(parent, items, cls) {
+    const ul = document.createElement("ul");
+    for (const it of items) {
+      const li = el("li", cls, it);
+      ul.append(li);
+    }
+    parent.append(ul);
+  }
+
   function row(label, res) {
     const r = el("div", "row");
     const [cls, caption] = CHIP[res.state] || ["maybe", "؟"];
@@ -221,6 +404,20 @@
     }
 
     out.append(el("div", "sub mono", probe.path));
+
+    // اگر این پوشه اسکلتِ PackageBuilder ندارد، راهِ ساختنش باید همین‌جا
+    // باشد. تا پیش از این فقط فرمانِ خط‌فرمان این کار را می‌کرد و کاربر در
+    // صفحه هیچ راهی نداشت جز اینکه پوشه‌ای دستی بسازد و مستقیم پکیج نصب کند.
+    if (probe.scaffolded && probe.scaffolded.state !== "present") {
+      const box = el("div", "make");
+      box.append(el("div", "mtitle", "این پوشه هنوز اسکلتِ پروژه ندارد"));
+      box.append(el("div", "mtext",
+        "اسکلت یعنی چند فایلِ پایه که هیچ تکنولوژی‌ای را تحمیل نمی‌کنند: README و CLAUDE.md و .gitignore و پوشهٔ اسناد و تصمیم‌ها و project.config.json. با همین، ابزار می‌فهمد چه تصمیم‌هایی گرفته‌ای و می‌تواند برشان گرداند."));
+      const btn = el("button", null, "اسکلتِ پروژه را بساز");
+      btn.addEventListener("click", () => askAndScaffold(probe.path));
+      box.append(btn);
+      out.append(box);
+    }
 
     // «وابستگی‌های ریشه» ردیفِ جدا شد: قبلاً فقط داخلِ متنِ مدرکِ «رانتایمِ Node»
     // پنهان بود و کاربر نمی‌فهمید node_modulesِ ریشه دیده شده یا نه.
@@ -336,6 +533,20 @@
 
   // ------------------------------------------------------------- تصمیم‌ها
 
+  /** همان چیزی که CLI نشان می‌دهد: چه چیزی از یک اعمالِ شکست‌خورده مانده. */
+  function leftovers(steps) {
+    const out = [];
+    for (const st of steps || []) {
+      if (st.kind === "writeFile" && st.changed) out.push(`فایلِ ساخته‌شده: ${st.path}`);
+      else if (st.kind === "mkdir" && st.changed) out.push(`پوشهٔ ساخته‌شده: ${st.path}`);
+      else if (st.kind === "pnpmWorkspace" && st.changed) out.push("pnpm-workspace.yaml نوشته یا کامل شد");
+      else if (st.kind === "cli" && st.ok) out.push(`فرمانی که اجرا شد: ${st.command}`);
+      else if (st.kind === "composeUp" && st.ok) out.push(`سرویسِ بالا آمده: ${st.service}`);
+      else if (st.kind === "env" && st.changed) out.push(`متغیرهای env: ${(st.added || []).join("، ")}`);
+    }
+    return out;
+  }
+
   let busy = false;
 
   /** یک تصمیم را اعمال یا برمی‌گرداند. فرمان‌ها در ترمینالِ کنار دیده می‌شوند. */
@@ -355,18 +566,46 @@
       const r = await res.json();
 
       if (!r.ok) {
-        alert(`انجام نشد — ${label}\n\n${r.error}` + (r.snippet ? `\n\nاین را خودت اضافه کن:\n${r.snippet}` : ""));
+        // شکست باید دیده و بسته شود، پس مودال.
+        modal(`انجام نشد — ${label}`, (b) => {
+          b.append(el("p", "lead", r.error));
+          if (r.snippet) {
+            b.append(el("h4", null, "این تکه را خودت اضافه کن"));
+            const pre = document.createElement("pre");
+            pre.textContent = r.snippet;
+            b.append(pre);
+          }
+          if (r.needs && r.needs.length) {
+            b.append(el("h4", null, "اول این‌ها را نصب کن"));
+            bullets(b, r.needs);
+          }
+          const left = leftovers(r.steps);
+          if (left.length) {
+            b.append(el("h4", null, "این‌ها انجام شده‌اند و سرِ جایشان مانده‌اند"));
+            bullets(b, left);
+            b.append(el("div", null, "عمداً چیزی پاک نشد — تصمیمش با توست: یا خودت بردارشان، یا مشکل را حل کن و دوباره بزن."));
+          }
+        }, { danger: true });
       } else if (r.alreadyPresent) {
-        alert(`${label} از قبل نصب است.\n\n${r.evidence}`);
+        // این حالت قبلاً عملاً نامرئی بود.
+        toast(`${label} از قبل نصب است`, r.evidence, { warn: true });
       } else {
-        const lines = [kind === "apply" ? `✓ اعمال شد: ${label}` : `✓ برگشت انجام شد: ${label}`, ""];
-        lines.push(`وضعیتِ واقعیِ الان: ${r.evidence}`);
-        if (kind === "apply" && !r.verified) lines.push("\nتوجه: فرمان‌ها اجرا شدند ولی مدرکِ نصب دیده نشد.");
-        if (r.manualSteps?.length) lines.push("\nکارهایی که خودکار انجام نشد:\n" + r.manualSteps.map((s) => "• " + s).join("\n"));
-        alert(lines.join("\n"));
+        const verb = kind === "apply" ? "نصب شد" : "برداشته شد";
+        toast(`✓ ${label} ${verb}`, r.evidence);
+
+        // نکته‌هایی که کاربر **باید** ببیند، توست نیستند.
+        const notes = [];
+        if (kind === "apply" && !r.verified) notes.push("فرمان‌ها اجرا شدند ولی مدرکِ نصب دیده نشد — خروجیِ ترمینال را بخوان.");
+        if (r.manualSteps && r.manualSteps.length) notes.push(...r.manualSteps);
+        if (notes.length) {
+          modal(`${label} — چند نکته`, (b) => {
+            b.append(el("p", "lead", `${verb}، ولی چند چیز هست که باید بدانی:`));
+            bullets(b, notes);
+          });
+        }
       }
     } catch (err) {
-      alert("درخواست به سرور نرسید: " + err.message);
+      modal("درخواست به سرور نرسید", (b) => b.append(el("p", "lead", err.message)), { danger: true });
     } finally {
       busy = false;
       btn.textContent = original;
@@ -376,38 +615,136 @@
     }
   }
 
-  function renderDecisions(path, stack) {
+  /** راهنمای یک گروه: توضیحِ جامع + فهرستِ گزینه‌ها با وضعیتشان. */
+  function showCategoryHelp(cat) {
+    modal(cat.label, (body) => {
+      body.append(el("p", "lead", cat.description || cat.question));
+
+      body.append(el("h4", null, "این تصمیم چه چیزی را مشخص می‌کند"));
+      body.append(el("div", null, cat.question));
+
+      body.append(el("h4", null, `گزینه‌ها (${cat.options.length})`));
+      const ul = document.createElement("ul");
+      for (const o of cat.options) {
+        const li = document.createElement("li");
+        const [, caption] = CHIP[o.state] || ["maybe", "؟"];
+        li.append(el("b", null, o.label), document.createTextNode(` — ${caption}`));
+        ul.append(li);
+      }
+      body.append(ul);
+
+      if (cat.foundational) {
+        body.append(el("h4", null, "توجه"));
+        body.append(el("div", null, "این یک تصمیمِ پایه است: بقیهٔ تصمیم‌ها رویش سوار می‌شوند، پس عوض‌کردنش بعداً سخت‌تر است."));
+      }
+    });
+  }
+
+  /** راهنمای یک پکیج: مزیت‌ها، عیب‌ها، مدرک، و دقیقاً چه اتفاقی می‌افتد. */
+  function showOptionHelp(cat, opt) {
+    modal(opt.label, (body) => {
+      const [cls, caption] = CHIP[opt.state] || ["maybe", "؟"];
+
+      const kv = (k, v) => {
+        const d = el("div", "kv");
+        d.append(el("span", "k", k), el("span", null, v));
+        body.append(d);
+      };
+
+      kv("وضعیت", caption);
+      kv("مدرک", opt.evidence || "—");
+      kv("گروه", cat.label);
+      if (opt.requires && opt.requires.length) kv("پیش‌نیاز", opt.requires.join("، "));
+      if (!opt.verified) kv("هشدار", "نصبِ این گزینه هنوز روی پوشهٔ خالی آزمایش نشده است.");
+
+      if (opt.meta && opt.meta.pros && opt.meta.pros.length) {
+        body.append(el("h4", null, "چرا خوب است"));
+        bullets(body, opt.meta.pros, "plus");
+      }
+      if (opt.meta && opt.meta.cons && opt.meta.cons.length) {
+        body.append(el("h4", null, "چه چیزی را باید بدانی"));
+        bullets(body, opt.meta.cons, "minus");
+      }
+
+      if (opt.installs && opt.installs.length) {
+        body.append(el("h4", null, "با زدنِ «نصب کن» دقیقاً چه می‌شود"));
+        const pre = document.createElement("pre");
+        pre.textContent = opt.installs.join("\n");
+        body.append(pre);
+      }
+
+      if (opt.removal) {
+        body.append(el("h4", null, "برگشت چطور است"));
+        if (opt.removal.lines && opt.removal.lines.length) {
+          const pre = document.createElement("pre");
+          pre.textContent = opt.removal.lines.join("\n");
+          body.append(pre);
+        }
+        if (opt.removal.note) body.append(el("div", null, opt.removal.note));
+        if (!opt.removal.lines.length && !opt.removal.note) body.append(el("div", null, "—"));
+      }
+    });
+  }
+
+  function renderDecisions(path, stack, freshness) {
     const host = $("decisions");
     host.textContent = "";
 
-    const cats = stack.categories.map((cat) => {
-      const box = el("div", "cat");
+    // اگر رجیستری بعد از بالا آمدنِ سرور عوض شده، صفحه نسخهٔ کهنه را نشان
+    // می‌دهد. سکوت درباره‌اش دو بار وقت گرفت تا معلوم شود گزینه گم نشده.
+    if (freshness && freshness.stale) {
+      host.append(el("div", "stale-bar",
+        "⚠ فهرستِ تکنولوژی‌ها بعد از راه‌اندازیِ سرور عوض شده. برای دیدنِ گزینه‌های نو، سرور را ری‌استارت کن (stop-server.bat و بعد start-server.bat)."));
+    }
 
-      const head = el("div", "head");
-      head.append(el("span", "name", cat.label), el("span", "q", cat.question));
+    for (const cat of stack.categories) {
       const chosenOpt = cat.options.find((o) => o.id === cat.chosen);
+      const box = el("div", "group" + (chosenOpt ? " settled" : ""));
+
+      const head = el("div", "ghead");
+      head.append(el("span", "gname", cat.label));
+
+      const help = el("button", "info-btn", "؟");
+      help.title = "توضیحِ این گروه";
+      help.addEventListener("click", () => showCategoryHelp(cat));
+      head.append(help);
+
+      head.append(el("span", "gq", cat.question));
+
       if (cat.conflict) {
-        head.append(el("span", "verdict clash", `⚠ چند گزینه همزمان نصب‌اند: ${cat.conflict.join("، ")}`));
+        head.append(el("span", "verdict-pill clash", `⚠ چند گزینه همزمان: ${cat.conflict.join("، ")}`));
       } else if (chosenOpt) {
-        head.append(el("span", "verdict chosen", `✓ ${chosenOpt.label}`));
+        head.append(el("span", "verdict-pill chosen", `✓ ${chosenOpt.label}`));
       } else if (cat.uncertain) {
-        head.append(el("span", "verdict vague", "؟ نامعلوم"));
+        head.append(el("span", "verdict-pill vague", "؟ نامعلوم"));
       } else {
-        head.append(el("span", "verdict none", "— انتخاب نشده"));
+        head.append(el("span", "verdict-pill none", "— انتخاب نشده"));
       }
       box.append(head);
 
+      const gbody = el("div", "gbody");
       for (const opt of cat.options) {
-        const o = el("div", "opt");
+        const installed = opt.state === "present";
+        const blocked = opt.missingRequirements.length > 0;
+
+        const o = el("div", "opt" + (installed ? " installed" : ""));
         const body = el("div", "body");
 
         const title = el("div", "title");
         const [cls, caption] = CHIP[opt.state] || ["maybe", "؟"];
         title.append(el("span", "chip " + cls, caption), el("b", null, opt.label));
+
+        const oHelp = el("button", "info-btn", "؟");
+        oHelp.title = "توضیحِ این گزینه";
+        oHelp.addEventListener("click", () => showOptionHelp(cat, opt));
+        title.append(oHelp);
+
+        // «از قبل نصب است» باید دیده شود، نه اینکه فقط دکمه خاموش باشد.
+        // کاربر درست گفت: «چیزی نمی‌گوید که نصب است و نمی‌خواهد نصب کنی».
+        if (installed) title.append(el("span", "badge-installed", "از قبل نصب است"));
         if (!opt.verified) title.append(el("span", "warn-tag", "نصبش آزمایش‌نشده"));
-        if (opt.missingRequirements.length) {
-          title.append(el("span", "warn-tag", `اول لازم است: ${opt.missingRequirements.join("، ")}`));
-        }
+        if (blocked) title.append(el("span", "warn-tag", `اول لازم است: ${opt.missingRequirements.join("، ")}`));
+
         body.append(title);
         body.append(el("div", "why", opt.evidence));
 
@@ -421,9 +758,6 @@
         o.append(body);
 
         const acts = el("div", "acts");
-        const installed = opt.state === "present";
-        const blocked = opt.missingRequirements.length > 0;
-
         const goBtn = el("button", "go", "نصب کن");
         goBtn.disabled = installed || blocked || !termReady;
         goBtn.title = !termReady
@@ -438,12 +772,62 @@
 
         acts.append(goBtn, undoBtn);
         o.append(acts);
-        box.append(o);
+        gbody.append(o);
       }
-      return box;
-    });
+      box.append(gbody);
+      host.append(box);
+    }
+  }
 
-    host.append(card("تصمیم‌ها — انتخاب کن، دکمه بزن", cats));
+  /**
+   * ساختِ اسکلت، با پرسیدنِ نامِ نمایشی.
+   *
+   * روی پوشهٔ پُر عمداً امتناع می‌شود (خودِ هسته این را می‌گوید) تا کارِ
+   * کسی پاک نشود؛ اینجا فقط پیامش را خوانا نشان می‌دهیم.
+   */
+  function askAndScaffold(path) {
+    let nameInput;
+    modal("ساختِ اسکلتِ پروژه", (b) => {
+      b.append(el("p", "lead", "چند فایلِ پایه ساخته می‌شود و یک مخزنِ گیت راه می‌افتد. هیچ تکنولوژی‌ای انتخاب نمی‌شود — آن‌ها را بعداً خودت می‌زنی."));
+      b.append(el("h4", null, "مسیر"));
+      b.append(el("div", "mono", path));
+      b.append(el("h4", null, "نامِ نمایشیِ پروژه (اختیاری)"));
+      nameInput = document.createElement("input");
+      nameInput.type = "text";
+      nameInput.placeholder = "پیش‌فرض: نامِ خودِ پوشه";
+      nameInput.style.cssText = "width:100%;padding:8px 10px;border-radius:8px;border:1px solid var(--border);background:var(--panel2);color:var(--text)";
+      b.append(nameInput);
+    }, {
+      actions: [
+        { label: "بساز", primary: true, onClick: () => doScaffold(path, nameInput ? nameInput.value.trim() : "") },
+        { label: "بی‌خیال" },
+      ],
+    });
+  }
+
+  async function doScaffold(path, name) {
+    try {
+      const res = await fetch("/api/new", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-pb-token": TOKEN },
+        body: JSON.stringify({ path, name: name || undefined }),
+      });
+      const r = await res.json();
+
+      if (!r.ok) {
+        modal("ساخته نشد", (b) => {
+          b.append(el("p", "lead", r.error));
+          b.append(el("div", null, "اگر پوشه خالی نیست، ابزار عمداً دست نمی‌زند تا کارِ موجود پاک نشود."));
+        }, { danger: true });
+        return;
+      }
+
+      toast("✓ اسکلتِ پروژه ساخته شد", `${r.files.length} فایل — ${r.git.committed ? "گیت راه افتاد و کامیتِ پایه زده شد" : "گیت راه نیفتاد"}`);
+      load();
+      loadDecisions();
+    } catch (err) {
+      modal("درخواست به سرور نرسید", (b) => b.append(el("p", "lead", err.message)), { danger: true });
+    }
   }
 
   async function loadDecisions() {
@@ -454,7 +838,7 @@
       const r = await fetch("/api/stack?path=" + encodeURIComponent(path));
       const data = await r.json();
       if (!data.ok) { host.textContent = ""; return; }
-      renderDecisions(path, data.stack);
+      renderDecisions(path, data.stack, data.freshness);
     } catch {
       host.textContent = "";
     }

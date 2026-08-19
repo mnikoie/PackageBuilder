@@ -8,7 +8,7 @@
  */
 
 import { test, expect } from "@playwright/test";
-import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { spawnSync } from "node:child_process";
@@ -63,12 +63,12 @@ test.afterAll(() => {
  */
 async function openProject(page, dir = project) {
   await page.goto("/?path=" + encodeURIComponent(dir));
-  await expect(page.locator(".cat").first()).toBeVisible();
+  await expect(page.locator(".group").first()).toBeVisible();
   await expect(page.locator("#termDot")).toHaveClass(/on/, { timeout: 25_000 });
 }
 
 /** یک دسته را با نامش پیدا می‌کند. */
-const category = (page, name) => page.locator(".cat").filter({ has: page.locator(".name", { hasText: name }) });
+const category = (page, name) => page.locator(".group").filter({ has: page.locator(".gname", { hasText: name }) });
 
 /** یک گزینه را داخلِ یک دسته پیدا می‌کند. */
 const option = (cat, label) => cat.locator(".opt").filter({ has: cat.page().locator("b", { hasText: label }) });
@@ -86,7 +86,7 @@ test("پوشهٔ نو: هیچ ادعای سبزِ دروغینی ندارد", as
   await openProject(page);
 
   // هیچ دسته‌ای نباید «انتخاب‌شده» داشته باشد
-  await expect(page.locator(".cat .verdict.chosen")).toHaveCount(0);
+  await expect(page.locator(".group .verdict-pill.chosen")).toHaveCount(0);
   // و هیچ گزینه‌ای «هست» نباشد
   await expect(page.locator(".opt .chip.ok")).toHaveCount(0);
 });
@@ -124,7 +124,7 @@ test("برچسبِ «آزمایش‌نشده» دقیقاً به همان‌ها
 test("دکمه‌ها تا وصل‌نشدنِ ترمینال خاموش‌اند", async ({ page }) => {
   // فرمانی که خروجی‌اش دیده نشود، ناقضِ قاعدهٔ «هیچ چیزی پنهان اجرا نشود» است.
   await page.goto("/?path=" + encodeURIComponent(project));
-  await expect(page.locator(".cat").first()).toBeVisible();
+  await expect(page.locator(".group").first()).toBeVisible();
 
   const pg = option(category(page, "دیتابیس"), "PostgreSQL");
   const go = pg.getByRole("button", { name: "نصب کن" });
@@ -134,10 +134,89 @@ test("دکمه‌ها تا وصل‌نشدنِ ترمینال خاموش‌ان�
   await expect(go).toBeEnabled();
 });
 
+test("راهنمای هر گروه و هر گزینه، از دادهٔ واقعی پر می‌شود", async ({ page }) => {
+  await openProject(page);
+
+  // راهنمای گروه
+  const db = category(page, "دیتابیس");
+  await db.locator(".info-btn").first().click();
+  const groupModal = page.locator(".modal");
+  await expect(groupModal.locator("h3")).toContainText("دیتابیس");
+  await expect(groupModal.locator(".lead")).not.toBeEmpty();
+  await expect(groupModal.locator("h4").filter({ hasText: "گزینه‌ها" })).toBeVisible();
+  await groupModal.locator("header .x").click();
+  await expect(page.locator(".modal")).toHaveCount(0);
+
+  // راهنمای گزینه — باید بگوید دقیقاً چه اتفاقی می‌افتد و برگشتش چطور است.
+  // این متن از خودِ گام‌های رجیستری ساخته می‌شود، نه از نوشتهٔ دستی، پس
+  // هیچ‌وقت با واقعیت ناهمگام نمی‌شود.
+  const pg = option(db, "PostgreSQL");
+  await pg.locator(".info-btn").click();
+  const optModal = page.locator(".modal");
+  await expect(optModal.locator("h3")).toContainText("PostgreSQL");
+  await expect(optModal).toContainText("با زدنِ «نصب کن» دقیقاً چه می‌شود");
+  await expect(optModal.locator("pre").first()).toContainText("postgres");
+  await expect(optModal).toContainText("برگشت چطور است");
+  await optModal.locator("header .x").click();
+});
+
+test("پوشهٔ بی‌اسکلت، دکمهٔ ساخت دارد — و بعدِ ساخت، اسکلت واقعاً هست", async ({ page }) => {
+  // این تا پیش از این فقط در خط‌فرمان ممکن بود و کاربر در صفحه راهی نداشت.
+  const dir = join(sandbox, "bare-" + Date.now());
+  mkdirSync(dir, { recursive: true });
+
+  await page.goto("/?path=" + encodeURIComponent(dir));
+  const make = page.locator(".make");
+  await expect(make).toBeVisible();
+  await make.getByRole("button", { name: "اسکلتِ پروژه را بساز" }).click();
+
+  const dialog = page.locator(".modal");
+  await expect(dialog.locator("h3")).toContainText("ساختِ اسکلتِ پروژه");
+  await dialog.locator("input").fill("پروژهٔ تستی");
+  await dialog.getByRole("button", { name: "بساز" }).click();
+
+  // ادعای صفحه کافی نیست — خودِ دیسک را می‌سنجیم
+  await expect(page.locator(".make")).toHaveCount(0, { timeout: 30_000 });
+  expect(existsSync(join(dir, "project.config.json"))).toBe(true);
+  expect(existsSync(join(dir, "docs", "decisions"))).toBe(true);
+  expect(readFileSync(join(dir, "project.config.json"), "utf8")).toContain("پروژهٔ تستی");
+});
+
+test("چیزی که نصب است، نشانِ دیدنی دارد — نه فقط دکمهٔ خاموش", async ({ page }) => {
+  // کاربر درست گفت: «چیزی نمی‌گوید که نصب است و نمی‌خواهد نصب کنی».
+  // قبلاً فقط دکمه خاموش می‌شد و توضیحش در tooltip پنهان بود.
+  // پوشهٔ تستِ e2e خالی است، پس اول واقعاً یک چیز نصب می‌کنیم — وگرنه تست
+  // چیزی را می‌سنجد که اصلاً وجود ندارد.
+  const dir = freshProject("badge" + Date.now());
+  await page.goto("/?path=" + encodeURIComponent(dir));
+  await expect(page.locator("#termDot")).toHaveClass(/on/, { timeout: 25_000 });
+
+  const lang = category(page, "زبان");
+  const node = option(lang, "Node.js");
+  await expect(node.locator(".badge-installed")).toHaveCount(0);
+
+  await node.getByRole("button", { name: "نصب کن" }).click();
+
+  await expect(node.locator(".badge-installed")).toContainText("از قبل نصب است", { timeout: 90_000 });
+  await expect(node.getByRole("button", { name: "نصب کن" })).toBeDisabled();
+  await expect(node).toHaveClass(/installed/);
+});
+
 test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → برداشتن با کلیک", async ({ page }) => {
-  // پیام‌های alert را می‌گیریم تا تست معطل نماند
-  const alerts = [];
-  page.on("dialog", (d) => { alerts.push(d.message()); d.accept(); });
+  // پیامِ موفقیت دیگر alert نیست — توستی است که خودش بعد از چند ثانیه می‌رود.
+  // پس به‌جای انتظارِ لحظه‌ای (که مسابقه‌ای است)، از همان اول ضبطشان می‌کنیم.
+  await page.addInitScript(() => {
+    window.__toasts = [];
+    const seen = new WeakSet();
+    new MutationObserver(() => {
+      for (const t of document.querySelectorAll(".toast")) {
+        if (seen.has(t)) continue;
+        seen.add(t);
+        window.__toasts.push(t.textContent);
+      }
+    }).observe(document, { childList: true, subtree: true });
+  });
+  const toastsSoFar = () => page.evaluate(() => (window.__toasts || []).join(" | "));
 
   await openProject(page);
 
@@ -148,9 +227,9 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
   await expect(pg.locator(".chip")).toContainText("نیست");
   await pg.getByRole("button", { name: "نصب کن" }).click();
 
-  await expect(db.locator(".verdict.chosen")).toContainText("PostgreSQL", { timeout: 90_000 });
+  await expect(db.locator(".verdict-pill.chosen")).toContainText("PostgreSQL", { timeout: 90_000 });
   await expect(pg.locator(".chip")).toContainText("هست");
-  expect(alerts.join()).toContain("اعمال شد");
+  expect(await toastsSoFar()).toContain("نصب شد");
 
   // مدرکِ واقعی، نه فقط ظاهرِ صفحه: کانتینر باید بالا باشد
   const running = spawnSync("docker", ["ps", "--filter", "name=clickedapp", "--format", "{{.Names}}"], {
@@ -171,12 +250,12 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
   expect(config.stack.database).toBe("postgres");
 
   // ---- برداشتن
-  alerts.length = 0;
+  await page.evaluate(() => { window.__toasts.length = 0; });
   await pg.getByRole("button", { name: "بردار" }).click();
 
-  await expect(db.locator(".verdict.none")).toBeVisible({ timeout: 90_000 });
+  await expect(db.locator(".verdict-pill.none")).toBeVisible({ timeout: 90_000 });
   await expect(pg.locator(".chip")).toContainText("نیست");
-  expect(alerts.join()).toContain("برگشت انجام شد");
+  expect(await toastsSoFar()).toContain("برداشته شد");
 
   // کانتینر باید خوابیده باشد
   const after = spawnSync("docker", ["ps", "--filter", "name=clickedapp", "--format", "{{.Names}}"], {
