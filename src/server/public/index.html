@@ -1243,10 +1243,10 @@
   });
 
   applyLang();
-  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") { stackCache.clear(); load(); loadDecisions().then(prefetchOtherLang); } });
+  $("path").addEventListener("keydown", (e) => { if (e.key === "Enter") { stackCache.clear(); load(); loadFinish(); loadDecisions().then(prefetchOtherLang); } });
 
   let timer = null;
-  $("path").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { stackCache.clear(); load(); loadDecisions(); }, 500); });
+  $("path").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(() => { stackCache.clear(); load(); loadFinish(); loadDecisions(); }, 500); });
 
   // ---------------------------------------------------------------- ترمینال
 
