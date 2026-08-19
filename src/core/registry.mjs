@@ -125,6 +125,125 @@ const FASTIFY_APP = minimalApp("api", "src/main.js", [
   "",
 ]);
 
+/**
+ * کانفیگِ redocly.
+ *
+ * دو قاعده عمداً خاموش‌اند و دلیلشان داخلِ خودِ فایل نوشته شده — خاموشیِ
+ * بی‌دلیل همان بدهی‌ای است که بعداً کسی جرئت نمی‌کند روشنش کند.
+ *
+ * قاعدهٔ operation-4xx-response عمداً **روشن** ماند: برای /health پاسخِ ۴xx
+ * معنا ندارد و هشدارش می‌ماند، ولی همان هشدار یادآوری‌ای است برای مسیرهای
+ * واقعی که بعداً اضافه می‌کنی.
+ */
+const REDOCLY_YAML = [
+  "extends:",
+  "  - recommended",
+  "rules:",
+  "  # انتخابِ لایسنس تصمیمِ صاحبِ پروژه است، نه این ابزار.",
+  "  info-license-strict: off",
+  "  # پروژهٔ نوساخته واقعاً روی localhost اجرا می‌شود؛ این آدرسِ نمونه نیست.",
+  "  no-server-example.com: off",
+  "",
+].join("\n");
+
+/**
+ * اسکلتِ سندِ OpenAPI.
+ *
+ * عمداً کامل‌تر از «حداقلِ معتبر» است: اجرای واقعیِ `redocly lint` روی نگارشِ
+ * اولِ این قالب ۲ خطا و ۳ هشدار داد (servers نبود، امنیت تعریف نشده بود،
+ * operationId و پاسخِ خطا نداشت). سندی که ابزارِ رسمیِ خودش ردش کند، از روزِ
+ * اول بدهی است — پس همان‌ها اینجا رفع شده‌اند.
+ */
+const OPENAPI_YAML = [
+  "openapi: 3.1.0",
+  "info:",
+  "  title: API",
+  "  version: 0.1.0",
+  "  description: نقشهٔ رسمیِ این API. هر مسیرِ نو را اینجا هم بنویس.",
+  "  license:",
+  "    name: UNLICENSED",
+  "servers:",
+  "  - url: http://localhost:4000",
+  "    description: اجرای محلی",
+  "components:",
+  "  schemas:",
+  "    Error:",
+  "      type: object",
+  "      properties:",
+  "        message:",
+  "          type: string",
+  "# پیش‌فرض: هیچ مسیری احراز هویت نمی‌خواهد. وقتی احرازِ هویت را انتخاب کردی،",
+  "# securitySchemes را اینجا اضافه کن و مسیرهای لازم را security بده.",
+  "security: []",
+  "paths:",
+  "  /health:",
+  "    get:",
+  "      operationId: getHealth",
+  "      summary: زنده بودنِ سرویس",
+  "      responses:",
+  '        "200":',
+  "          description: سرویس بالاست",
+  "          content:",
+  "            application/json:",
+  "              schema:",
+  "                type: object",
+  "                properties:",
+  "                  ok:",
+  "                    type: boolean",
+  '        "500":',
+  "          description: خطای داخلی",
+  "          content:",
+  "            application/json:",
+  "              schema:",
+  '                $ref: "#/components/schemas/Error"',
+  "",
+].join("\n");
+
+/** روترِ نمونهٔ tRPC. کوچک است ولی واقعاً صدا زده می‌شود. */
+const TRPC_ROUTER = [
+  'import { initTRPC } from "@trpc/server";',
+  'import { z } from "zod";',
+  "",
+  "const t = initTRPC.create();",
+  "",
+  "export const appRouter = t.router({",
+  "  ping: t.procedure.query(() => ({ ok: true })),",
+  "  greet: t.procedure",
+  "    .input(z.object({ name: z.string() }))",
+  "    .query(({ input }) => `سلام ${input.name}`),",
+  "});",
+  "",
+  "// نوعِ روتر همان چیزی است که سمتِ کلاینت import می‌شود — بی تولیدِ کد.",
+  "export const createCaller = t.createCallerFactory(appRouter);",
+  "",
+].join("\n");
+
+/** سرورِ نمونهٔ GraphQL روی graphql-yoga. */
+const GRAPHQL_SERVER = [
+  'import { createServer } from "node:http";',
+  'import { createSchema, createYoga } from "graphql-yoga";',
+  "",
+  "const yoga = createYoga({",
+  "  schema: createSchema({",
+  "    typeDefs: `type Query { hello: String! }`,",
+  '    resolvers: { Query: { hello: () => "سلام" } },',
+  "  }),",
+  "});",
+  "",
+  "const port = Number(process.env.GRAPHQL_PORT ?? 4001);",
+  'createServer(yoga).listen(port, "127.0.0.1", () =>',
+  "  console.log(`GraphQL: http://127.0.0.1:${port}/graphql`),",
+  ");",
+  "",
+].join("\n");
+
+/** کمترین appِ ممکن برای api — وقتی هنوز فریم‌ورکِ بک‌اندی انتخاب نشده. */
+const BARE_API_APP = minimalApp("api", "src/main.js", [
+  '// این فایل جای‌نگه‌دار است. با انتخابِ فریم‌ورکِ بک‌اند، جایش را می‌گیرد.',
+  'console.log("apps/api آماده است.");',
+  "",
+]);
+
 const WORKER_APP = minimalApp("worker", "src/main.js", [
   'import { Worker } from "bullmq";',
   "",
@@ -181,6 +300,12 @@ export const CATEGORIES = [
   { id: "database", label: "دیتابیس", question: "داده کجا ذخیره شود؟" },
   { id: "search", label: "جستجو", question: "جستجوی متنی چطور انجام شود؟" },
   { id: "storage", label: "ذخیره‌سازیِ فایل", question: "فایل‌ها کجا نگه داشته شوند؟" },
+  {
+    id: "apiStyle",
+    label: "سبکِ API",
+    question: "برنامه و سرور با چه قراردادی حرف بزنند؟",
+    requiresCategory: "packageManager",
+  },
   {
     id: "e2e",
     label: "تستِ سرتاسری",
@@ -613,6 +738,72 @@ export const TECHNOLOGIES = [
     },
   },
 
+  // ----------------------------------------------------------- سبکِ API
+  {
+    id: "rest-openapi",
+    category: "apiStyle",
+    label: "REST + OpenAPI",
+    requires: ["pnpm"],
+    // مدرک، نصبِ ابزارِ سنجشِ سند است نه خودِ فایل: فایلِ yaml را هر کسی
+    // می‌تواند دست‌نویس کند، ولی ابزارِ اعتبارسنجی یعنی واقعاً کار شده.
+    detect: { kind: "npm", role: "api", name: "@redocly/cli" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/openapi.yaml", content: OPENAPI_YAML },
+        { kind: "writeFile", path: "apps/api/redocly.yaml", content: REDOCLY_YAML },
+        { kind: "cli", command: "pnpm --filter api add -D @redocly/cli" },
+      ],
+    },
+    meta: {
+      pros: ["همه‌جا فهمیده می‌شود — هر زبانی کلاینتش را می‌سازد", "سند از خودِ قرارداد می‌آید", "کش و پراکسی و ابزارهای HTTP همه با آن راحت‌اند"],
+      cons: ["برای دادهٔ تودرتو چند رفت‌وبرگشت لازم می‌شود", "هماهنگ نگه‌داشتنِ سند با کد دستی است"],
+    },
+  },
+  {
+    id: "trpc",
+    category: "apiStyle",
+    label: "tRPC",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "api", name: "@trpc/server" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/src/trpc.js", content: TRPC_ROUTER },
+        { kind: "cli", command: "pnpm --filter api add @trpc/server zod" },
+      ],
+    },
+    meta: {
+      pros: ["نوعِ داده بی هیچ تولیدِ کدی از سرور به کلاینت می‌رسد", "کم‌ترین کدِ اضافه", "خطای ناسازگاری را همان موقعِ نوشتن می‌گیرد"],
+      cons: ["فقط در دنیای TypeScript کار می‌کند", "کلاینتِ غیرِ TS باید REST جدا داشته باشد"],
+    },
+  },
+  {
+    id: "graphql",
+    category: "apiStyle",
+    label: "GraphQL",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "api", name: "graphql-yoga" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        { kind: "writeFile", path: "apps/api/package.json", content: BARE_API_APP.pkg },
+        { kind: "writeFile", path: "apps/api/src/graphql.js", content: GRAPHQL_SERVER },
+        { kind: "cli", command: "pnpm --filter api add graphql graphql-yoga" },
+        { kind: "env", vars: { GRAPHQL_PORT: "4001" } },
+      ],
+    },
+    meta: {
+      pros: ["کلاینت دقیقاً همان چیزی را می‌گیرد که خواسته", "یک درخواست به‌جای چند رفت‌وبرگشت", "شمای قویِ خودتوصیف"],
+      cons: ["کش‌کردن سخت‌تر از REST است", "پیچیدگیِ اضافه برای APIِ ساده"],
+    },
+  },
+
   // -------------------------------------------------------------- جستجو
   {
     id: "meilisearch",
@@ -771,6 +962,25 @@ export const REMOVALS = {
     manual: "این یک پوشهٔ کاملِ app ساخته (apps/api). حذفش یعنی پاک‌کردنِ کدت — خودت تصمیم بگیر و خودت پاکش کن.",
   },
   express: { steps: [{ kind: "cli", command: "pnpm --filter api remove express" }] },
+  "rest-openapi": {
+    steps: [
+      { kind: "cli", command: "pnpm --filter api remove @redocly/cli" },
+      { kind: "deleteFile", path: "apps/api/openapi.yaml" },
+      { kind: "deleteFile", path: "apps/api/redocly.yaml" },
+    ],
+  },
+  trpc: {
+    steps: [
+      { kind: "cli", command: "pnpm --filter api remove @trpc/server zod" },
+      { kind: "deleteFile", path: "apps/api/src/trpc.js" },
+    ],
+  },
+  graphql: {
+    steps: [
+      { kind: "cli", command: "pnpm --filter api remove graphql graphql-yoga" },
+      { kind: "deleteFile", path: "apps/api/src/graphql.js" },
+    ],
+  },
   fastify: { steps: [{ kind: "cli", command: "pnpm --filter api remove fastify" }] },
   bullmq: { steps: [{ kind: "cli", command: "pnpm --filter worker remove bullmq ioredis" }] },
 
