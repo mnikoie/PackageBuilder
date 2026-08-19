@@ -84,6 +84,25 @@ function scriptCommand(projectPath, name, appList) {
   return withScript.map((a) => `${pm} --filter ${a} run ${name}`).join("; ");
 }
 
+/**
+ * چند کار را با یک فرمان اجرا می‌کند.
+ *
+ * با Turborepo و Nx همه‌شان در یک اجرا و موازی می‌روند و پیشرفتِ هرکدام جدا
+ * دیده می‌شود. بی ابزارِ مونوریپو، پشتِ‌سرِ هم صدا زده می‌شوند.
+ */
+function multiScriptCommand(projectPath, names, appList) {
+  const pm = existsSync(join(projectPath, "pnpm-lock.yaml")) ? "pnpm" : "npm";
+  if (existsSync(join(projectPath, "turbo.json"))) return `${pm} exec turbo run ${names.join(" ")}`;
+  if (existsSync(join(projectPath, "nx.json"))) return `${pm} exec nx run-many -t ${names.join(",")}`;
+
+  const parts = [];
+  for (const name of names) {
+    const one = scriptCommand(projectPath, name, appList);
+    if (one) parts.push(one);
+  }
+  return parts.length ? parts.join("; ") : null;
+}
+
 /** appهایی که پوشه‌شان هست. */
 function apps(projectPath) {
   const dir = join(projectPath, "apps");
@@ -174,17 +193,27 @@ export function finishSteps(projectPath, probe) {
     });
   }
 
-  // ۶) سنجشِ سلامت — فقط اگر اسکریپتِ build جایی واقعاً وجود داشته باشد
-  const buildCmd = scriptCommand(projectPath, "build", appList);
-  if (buildCmd) {
-    steps.push({
-      id: "check",
-      title: "بررسیِ سالم‌بودن",
-      why: "قبل از اجرا یک‌بار بیلد بگیر تا اگر چیزی نیمه‌کاره مانده همین‌جا معلوم شود.",
-      command: `cd "${projectPath}"; ${buildCmd}`,
-      done: false,
-      manual: true,
-    });
+  // ۶) سنجشِ سلامت.
+  //
+  // بیلدِ تنها کافی نیست: خطای نوع، ایرادِ lint و تستِ شکسته هیچ‌کدام در بیلد
+  // معلوم نمی‌شوند. پس هر چهار کار با هم اجرا می‌شوند — ولی فقط آن‌هایی که
+  // واقعاً در پروژه تعریف شده‌اند، وگرنه فرمان روی کارِ ناموجود می‌شکند.
+  const checks = ["lint", "typecheck", "build", "test"].filter((name) =>
+    scriptsOf(join(projectPath, "package.json"))[name] ||
+    appList.some((a) => scriptsOf(join(projectPath, "apps", a, "package.json"))[name]),
+  );
+  if (checks.length) {
+    const runner = multiScriptCommand(projectPath, checks, appList);
+    if (runner) {
+      steps.push({
+        id: "check",
+        title: "بررسیِ سالم‌بودن",
+        why: `${checks.join("، ")} — قبل از اجرا یک‌بار همه را بزن تا اگر چیزی نیمه‌کاره مانده همین‌جا معلوم شود.`,
+        command: `cd "${projectPath}"; ${runner}`,
+        done: false,
+        manual: true,
+      });
+    }
   }
 
   // ۷) اجرا — همان منطق: فرمانی که وجود ندارد پیشنهاد نمی‌شود
