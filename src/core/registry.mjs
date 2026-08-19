@@ -736,6 +736,10 @@ export const TECHNOLOGIES = [
         // workspace خطا می‌دهد. پس خودش هر دو فایل را می‌سازد.
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "writeFile", path: "turbo.json", content: TURBO_JSON },
+        // Turborepo بی این فیلد اصلاً بالا نمی‌آید: «Could not resolve workspace.
+        // Missing packageManager field». نسخه از خودِ pnpmِ نصب‌شده خوانده
+        // می‌شود، نه یک عددِ ثابت که فردا کهنه شود.
+        { kind: "cli", command: 'pnpm pkg set packageManager="pnpm@$(pnpm --version)"' },
         { kind: "pnpmAddDev", packages: ["turbo"] },
       ],
     },
