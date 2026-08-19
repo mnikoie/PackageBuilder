@@ -151,6 +151,10 @@
   .group > .ghead .gname { font-weight: 700; font-size: .95rem; }
   .group > .ghead .gq { color: var(--muted); font-size: .76rem; flex: 1; min-width: 0; }
   .group > .gbody { padding: 4px 0; }
+  .group > .ghead { cursor: pointer; user-select: none; }
+  .group > .ghead .caret { color: var(--muted); font-size: .8rem; transition: transform .15s; }
+  .group.closed > .gbody { display: none; }
+  .group.closed > .ghead .caret { transform: rotate(-90deg); display: inline-block; }
 
   .verdict-pill { font-size: .74rem; font-weight: 700; padding: 3px 10px; border-radius: 20px; white-space: nowrap; }
   .verdict-pill.chosen { background: var(--ok-bg); color: var(--ok); }
@@ -267,6 +271,7 @@
       <span><span class="chip maybe">؟ نامعلوم</span> <b>نتوانستیم بپرسیم</b></span>
     </div>
 
+    <div id="makeHost"></div>
     <div id="decisions"></div>
     <div id="out"></div>
 
@@ -292,7 +297,7 @@
 <script src="/vendor/addon-fit.js"></script>
 <script>
   const $ = (id) => document.getElementById(id);
-  const CHIP = { present: ["ok", "✓ هست"], absent: ["no", "✗ نیست"], unknown: ["maybe", "؟ نامعلوم"] };
+  const CHIP = { present: ["ok", "✓"], absent: ["no", "✗"], unknown: ["maybe", "؟"] };
 
   // توکنِ همین صفحه. سرور آن را هنگامِ سِرو کردن تزریق می‌کند و صفحهٔ بیگانه
   // نمی‌تواند بخواندش — پس فقط از داخلِ همین صفحه می‌شود فرمان اجرا کرد.
@@ -405,9 +410,9 @@
 
     out.append(el("div", "sub mono", probe.path));
 
-    // اگر این پوشه اسکلتِ PackageBuilder ندارد، راهِ ساختنش باید همین‌جا
-    // باشد. تا پیش از این فقط فرمانِ خط‌فرمان این کار را می‌کرد و کاربر در
-    // صفحه هیچ راهی نداشت جز اینکه پوشه‌ای دستی بسازد و مستقیم پکیج نصب کند.
+    // اسکلت اولین کارِ هر پروژه است، پس بالای صفحه می‌نشیند نه لای گزارش.
+    const makeHost = $("makeHost");
+    makeHost.textContent = "";
     if (probe.scaffolded && probe.scaffolded.state !== "present") {
       const box = el("div", "make");
       box.append(el("div", "mtitle", "این پوشه هنوز اسکلتِ پروژه ندارد"));
@@ -416,7 +421,7 @@
       const btn = el("button", null, "اسکلتِ پروژه را بساز");
       btn.addEventListener("click", () => askAndScaffold(probe.path));
       box.append(btn);
-      out.append(box);
+      makeHost.append(box);
     }
 
     // «وابستگی‌های ریشه» ردیفِ جدا شد: قبلاً فقط داخلِ متنِ مدرکِ «رانتایمِ Node»
@@ -686,6 +691,8 @@
     });
   }
 
+  const openGroups = new Set();
+
   function renderDecisions(path, stack, freshness) {
     const host = $("decisions");
     host.textContent = "";
@@ -702,11 +709,12 @@
       const box = el("div", "group" + (chosenOpt ? " settled" : ""));
 
       const head = el("div", "ghead");
+      head.append(el("span", "caret", "▾"));
       head.append(el("span", "gname", cat.label));
 
       const help = el("button", "info-btn", "؟");
       help.title = "توضیحِ این گروه";
-      help.addEventListener("click", () => showCategoryHelp(cat));
+      help.addEventListener("click", (e) => { e.stopPropagation(); showCategoryHelp(cat); });
       head.append(help);
 
       head.append(el("span", "gq", cat.question));
@@ -748,13 +756,7 @@
         body.append(title);
         body.append(el("div", "why", opt.evidence));
 
-        if (opt.meta) {
-          const pc = el("div", "prosCons");
-          pc.append(el("span", "plus", "+ " + opt.meta.pros[0]));
-          pc.append(document.createTextNode("   "));
-          pc.append(el("span", "minus", "− " + opt.meta.cons[0]));
-          body.append(pc);
-        }
+        // مزیت و عیب فقط در مودالِ راهنما — اینجا شلوغی می‌ساخت.
         o.append(body);
 
         const acts = el("div", "acts");
@@ -775,6 +777,19 @@
         gbody.append(o);
       }
       box.append(gbody);
+
+      // فقط گروهِ اول باز است؛ بقیه با کلیک. و بعد از هر نصب که صفحه دوباره
+      // ساخته می‌شود، هر گروهی که باز بوده باز می‌ماند — وگرنه کاربر جایش را
+      // گم می‌کند.
+      const isFirst = host.querySelectorAll(".group").length === 0;
+      const open = openGroups.has(cat.id) || (isFirst && openGroups.size === 0);
+      if (!open) box.classList.add("closed");
+      head.addEventListener("click", () => {
+        box.classList.toggle("closed");
+        if (box.classList.contains("closed")) openGroups.delete(cat.id);
+        else openGroups.add(cat.id);
+      });
+
       host.append(box);
     }
   }

@@ -71,6 +71,12 @@ async function openProject(page, dir = project) {
 const category = (page, name) => page.locator(".group").filter({ has: page.locator(".gname", { hasText: name }) });
 
 /** یک گزینه را داخلِ یک دسته پیدا می‌کند. */
+/** گروه‌ها آکاردئونی‌اند و جز اولی بسته‌اند — پس قبل از کار باید باز شوند. */
+const openGroup = async (cat) => {
+  if (await cat.evaluate((e) => e.classList.contains("closed"))) await cat.locator(".ghead").click();
+  return cat;
+};
+
 const option = (cat, label) => cat.locator(".opt").filter({ has: cat.page().locator("b", { hasText: label }) });
 
 test("صفحه بالا می‌آید و ترمینالِ واقعی وصل می‌شود", async ({ page }) => {
@@ -95,13 +101,13 @@ test("ترتیبِ پیش‌نیازها راهنمایی می‌کند", async 
   await openProject(page);
 
   // Node.js پیش‌نیاز ندارد → دکمه‌اش فعال است
-  const node = option(category(page, "زبان/رانتایمِ اصلی"), "Node.js");
+  const node = option(await openGroup(category(page, "زبان/رانتایمِ اصلی")), "Node.js");
   await expect(node.getByRole("button", { name: "نصب کن" })).toBeEnabled();
 
   // pnpm به Node نیاز دارد و Node نصب نیست → خاموش، با توضیحِ صریح.
   // (هر گزینه می‌تواند چند برچسبِ هشدار داشته باشد، پس دقیقاً همان یکی را
   // می‌گیریم — وگرنه انتخاب‌گر مبهم می‌شود.)
-  const pnpm = option(category(page, "مدیرِ پکیج"), "pnpm");
+  const pnpm = option(await openGroup(category(page, "مدیرِ پکیج")), "pnpm");
   await expect(pnpm.getByRole("button", { name: "نصب کن" })).toBeDisabled();
   await expect(pnpm.locator(".warn-tag").filter({ hasText: "اول لازم است" })).toContainText("Node.js");
 });
@@ -126,7 +132,7 @@ test("دکمه‌ها تا وصل‌نشدنِ ترمینال خاموش‌ان�
   await page.goto("/?path=" + encodeURIComponent(project));
   await expect(page.locator(".group").first()).toBeVisible();
 
-  const pg = option(category(page, "دیتابیس"), "PostgreSQL");
+  const pg = option(await openGroup(category(page, "دیتابیس")), "PostgreSQL");
   const go = pg.getByRole("button", { name: "نصب کن" });
 
   // بعد از وصل‌شدن، همان دکمه فعال می‌شود
@@ -138,7 +144,7 @@ test("راهنمای هر گروه و هر گزینه، از دادهٔ واقع
   await openProject(page);
 
   // راهنمای گروه
-  const db = category(page, "دیتابیس");
+  const db = await openGroup(category(page, "دیتابیس"));
   await db.locator(".info-btn").first().click();
   const groupModal = page.locator(".modal");
   await expect(groupModal.locator("h3")).toContainText("دیتابیس");
@@ -191,7 +197,7 @@ test("چیزی که نصب است، نشانِ دیدنی دارد — نه فق
   await page.goto("/?path=" + encodeURIComponent(dir));
   await expect(page.locator("#termDot")).toHaveClass(/on/, { timeout: 25_000 });
 
-  const lang = category(page, "زبان");
+  const lang = await openGroup(category(page, "زبان"));
   const node = option(lang, "Node.js");
   await expect(node.locator(".badge-installed")).toHaveCount(0);
 
@@ -220,15 +226,15 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
 
   await openProject(page);
 
-  const db = category(page, "دیتابیس");
+  const db = await openGroup(category(page, "دیتابیس"));
   const pg = option(db, "PostgreSQL");
 
   // ---- نصب
-  await expect(pg.locator(".chip")).toContainText("نیست");
+  await expect(pg.locator(".chip.no")).toBeVisible();
   await pg.getByRole("button", { name: "نصب کن" }).click();
 
   await expect(db.locator(".verdict-pill.chosen")).toContainText("PostgreSQL", { timeout: 90_000 });
-  await expect(pg.locator(".chip")).toContainText("هست");
+  await expect(pg.locator(".chip.ok")).toBeVisible();
   expect(await toastsSoFar()).toContain("نصب شد");
 
   // مدرکِ واقعی، نه فقط ظاهرِ صفحه: کانتینر باید بالا باشد
@@ -254,7 +260,7 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
   await pg.getByRole("button", { name: "بردار" }).click();
 
   await expect(db.locator(".verdict-pill.none")).toBeVisible({ timeout: 90_000 });
-  await expect(pg.locator(".chip")).toContainText("نیست");
+  await expect(pg.locator(".chip.no")).toBeVisible();
   expect(await toastsSoFar()).toContain("برداشته شد");
 
   // کانتینر باید خوابیده باشد
@@ -274,9 +280,9 @@ test("فرمان‌ها در ترمینال دیده می‌شوند — هیچ 
   // نکند. بی این، تستی که تنها پاس می‌شد در اجرای گروهی می‌شکست.
   await openProject(page, freshProject("terminalvisible"));
 
-  const pg = option(category(page, "دیتابیس"), "PostgreSQL");
+  const pg = option(await openGroup(category(page, "دیتابیس")), "PostgreSQL");
   await pg.getByRole("button", { name: "نصب کن" }).click();
-  await expect(pg.locator(".chip")).toContainText("هست", { timeout: 90_000 });
+  await expect(pg.locator(".chip.ok")).toBeVisible({ timeout: 90_000 });
 
   // متنِ ترمینال باید فرمانِ واقعیِ docker را نشان بدهد.
   const termText = await page.evaluate(() => {
@@ -299,5 +305,5 @@ test("فرمان‌ها در ترمینال دیده می‌شوند — هیچ 
 
   // پاک‌سازی برای تستِ بعدی
   await pg.getByRole("button", { name: "بردار" }).click();
-  await expect(pg.locator(".chip")).toContainText("نیست", { timeout: 90_000 });
+  await expect(pg.locator(".chip.no")).toBeVisible({ timeout: 90_000 });
 });
