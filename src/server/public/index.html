@@ -408,6 +408,8 @@
       doneMark: "انجام شد",
       manualStep: "دستی",
       copied: "کپی شد",
+      runWindow: "پنجرهٔ جدا",
+      runWindowWhy: "نمای تعاملیِ turbo فقط در پنجرهٔ کنسولِ واقعی کار می‌کند",
       allDone: "همه‌چیز آماده است — چیزی نمانده.",
       needPrereq: "اول پیش‌نیازش را نصب کن",
     },
@@ -487,6 +489,8 @@
       doneMark: "done",
       manualStep: "manual",
       copied: "copied",
+      runWindow: "In a window",
+      runWindowWhy: "turbo\u2019s interactive view only works in a real console window",
       allDone: "Everything is ready — nothing left to do.",
       needPrereq: "install its prerequisite first",
     },
@@ -1138,6 +1142,24 @@
         }
       });
       acts.append(runBtn);
+
+      // ابزارهایی با نمای تمام‌صفحه در ترمینالِ داخلِ صفحه درست دیده نمی‌شوند.
+      if (/turbo|nx /.test(st.command)) {
+        const winBtn = el("button", null, T("runWindow"));
+        winBtn.title = T("runWindowWhy");
+        winBtn.addEventListener("click", async () => {
+          try {
+            await fetch("/api/run-window", {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "x-pb-token": TOKEN },
+              body: JSON.stringify({ command: st.command }),
+            });
+          } catch (err) {
+            modal(T("serverUnreachable"), (b) => b.append(el("p", "lead", err.message)), { danger: true });
+          }
+        });
+        acts.append(winBtn);
+      }
 
       // علامتِ دستی — برای قدم‌هایی که مدرکِ خودکار ندارند (مثلِ پر کردنِ کلید).
       const label = document.createElement("label");
