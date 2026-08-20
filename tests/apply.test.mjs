@@ -18,6 +18,7 @@ import { spawnSync } from "node:child_process";
 import {
   applyEnvVars, generateCompose, composeServicesFor, nextDecisionNumber,
   writeDecisionDoc, updateStackConfig, applyTechnology, revertTechnology, removeEnvVars,
+  mergeScaffoldedApp,
   ensurePnpmWorkspace, describeLeftovers, GENERATED_MARKER,
 } from "../src/core/apply.mjs";
 import { scaffoldProject } from "../src/core/scaffold.mjs";
@@ -571,5 +572,76 @@ describe("describeLeftovers", () => {
   test("وقتی هیچ کاری نشده، چیزی نمی‌گوید", () => {
     assert.deepEqual(describeLeftovers([]), []);
     assert.deepEqual(describeLeftovers(), []);
+  });
+});
+
+describe("ادغامِ اسکافولد در پوشه‌ای که از قبل چیزی داشته", () => {
+  // این تست از یک شکستِ واقعی آمد: کاربر Sentry و OpenAPI را زودتر نصب کرده
+  // بود، بعد `nest new apps/api` با «A merge conflicted on path
+  // /apps/api/package.json» رد شد و هیچ راهِ ادامه‌ای نماند.
+  let dir;
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "pb-merge-"));
+  });
+
+  const seedScaffold = () => {
+    mkdirSync(join(dir, ".pb-scaffold", "api", "src"), { recursive: true });
+    writeFileSync(join(dir, ".pb-scaffold", "api", "package.json"), JSON.stringify({
+      name: "api",
+      scripts: { start: "nest start" },
+      dependencies: { "@nestjs/core": "^11.0.0" },
+      devDependencies: { "@nestjs/cli": "^11.0.0" },
+    }));
+    writeFileSync(join(dir, ".pb-scaffold", "api", "src", "main.ts"), "// nest");
+  };
+
+  test("پوشهٔ مقصد نبود: فقط جابه‌جا می‌شود", () => {
+    seedScaffold();
+    const res = mergeScaffoldedApp(dir, { from: ".pb-scaffold/api", to: "apps/api" });
+    assert.equal(res.ok, true);
+    assert.equal(res.moved, true);
+    assert.ok(existsSync(join(dir, "apps", "api", "src", "main.ts")));
+  });
+
+  test("فایلِ از قبل موجود بازنویسی نمی‌شود", () => {
+    seedScaffold();
+    mkdirSync(join(dir, "apps", "api", "src"), { recursive: true });
+    writeFileSync(join(dir, "apps", "api", "src", "logger.js"), "// مالِ کاربر");
+    writeFileSync(join(dir, "apps", "api", "src", "main.ts"), "// مالِ کاربر");
+    writeFileSync(join(dir, "apps", "api", "package.json"), JSON.stringify({ name: "api" }));
+
+    const res = mergeScaffoldedApp(dir, { from: ".pb-scaffold/api", to: "apps/api" });
+    assert.equal(res.ok, true);
+    assert.equal(readFileSync(join(dir, "apps", "api", "src", "main.ts"), "utf8"), "// مالِ کاربر");
+    assert.equal(readFileSync(join(dir, "apps", "api", "src", "logger.js"), "utf8"), "// مالِ کاربر");
+  });
+
+  test("package.json: شکل از اسکافولد، وابستگی‌ها از هر دو", () => {
+    seedScaffold();
+    mkdirSync(join(dir, "apps", "api"), { recursive: true });
+    writeFileSync(join(dir, "apps", "api", "package.json"), JSON.stringify({
+      name: "api",
+      // این «type» بعدِ ادغام نباید بماند — Nest را از کار می‌اندازد.
+      type: "module",
+      scripts: { start: "node src/main.js" },
+      dependencies: { pino: "^10.3.1" },
+      devDependencies: { "@redocly/cli": "^2.46.2" },
+    }));
+
+    const res = mergeScaffoldedApp(dir, { from: ".pb-scaffold/api", to: "apps/api" });
+    assert.equal(res.ok, true);
+
+    const pkg = JSON.parse(readFileSync(join(dir, "apps", "api", "package.json"), "utf8"));
+    assert.equal(pkg.type, undefined, "شکلِ اپ را فریم‌ورک تعیین می‌کند");
+    assert.equal(pkg.scripts.start, "nest start");
+    assert.equal(pkg.dependencies["@nestjs/core"], "^11.0.0");
+    assert.equal(pkg.dependencies.pino, "^10.3.1", "وابستگیِ افزونهٔ قبلی نباید گم شود");
+    assert.equal(pkg.devDependencies["@redocly/cli"], "^2.46.2");
+  });
+
+  test("اسکافولد ساخته نشده بود: خطا می‌دهد، نه ادعای موفقیت", () => {
+    const res = mergeScaffoldedApp(dir, { from: ".pb-scaffold/api", to: "apps/api" });
+    assert.equal(res.ok, false);
+    assert.match(res.reason, /ساخته نشد/);
   });
 });

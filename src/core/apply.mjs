@@ -12,7 +12,7 @@
  *    دلیلِ موفقیت نیست.
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, renameSync, cpSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
 
@@ -383,6 +383,77 @@ function renderComposeServices(services) {
 }
 
 /** سرویس‌های composeِ همهٔ تکنولوژی‌هایی که در stack انتخاب شده‌اند. */
+/**
+ * ادغامِ اپِ تازه‌اسکافولدشده در پوشه‌ای که شاید از قبل چیزی داشته باشد.
+ *
+ * چرا لازم است: اسکافولدرهای رسمی (nest، create-next-app) روی پوشهٔ ناخالی
+ * شکست می‌خورند. ولی خیلی وقت‌ها کاربر اول یک افزونه (Sentry، OpenAPI) نصب
+ * کرده که همان پوشه را ساخته. بی این تابع، تنها راهش پاک‌کردنِ دستی بود.
+ *
+ * قاعدهٔ ادغام:
+ * - فایل‌ها: هرچه در مقصد نیست کپی می‌شود؛ هرچه هست دست نمی‌خورد. (کدی که
+ *   کاربر یا افزونه‌ای نوشته، هرگز بازنویسی نمی‌شود.)
+ * - package.json: **اسکافولد مبنا است**، نه فایلِ قبلی. شکلِ اپ را فریم‌ورک
+ *   تعیین می‌کند (type، main، scripts)؛ افزونه فقط وابستگی آورده بود. پس
+ *   وابستگی‌های قبلی به آن اضافه می‌شوند و بقیه از اسکافولد می‌آید.
+ *   وگرنه یک `"type": "module"`ِ جامانده، Nest را از کار می‌انداخت.
+ */
+export function mergeScaffoldedApp(projectPath, { from, to }) {
+  const src = join(projectPath, from);
+  const dest = join(projectPath, to);
+  if (!existsSync(src)) return { ok: false, reason: `پوشهٔ موقتِ ${from} ساخته نشد` };
+
+  // مقصد نبود؟ پس ادغامی در کار نیست — فقط جابه‌جایی.
+  if (!existsSync(dest)) {
+    mkdirSync(dirname(dest), { recursive: true });
+    renameSync(src, dest);
+    return { ok: true, moved: true, kept: [] };
+  }
+
+  const kept = [];
+  const merged = [];
+
+  const walk = (relative) => {
+    for (const entry of readdirSync(join(src, relative || "."), { withFileTypes: true })) {
+      const rel = relative ? `${relative}/${entry.name}` : entry.name;
+      if (entry.isDirectory()) {
+        mkdirSync(join(dest, rel), { recursive: true });
+        walk(rel);
+        continue;
+      }
+      if (existsSync(join(dest, rel))) {
+        kept.push(rel);
+        continue;
+      }
+      cpSync(join(src, rel), join(dest, rel));
+      merged.push(rel);
+    }
+  };
+  walk("");
+
+  // package.json تنها فایلی است که «نگه‌داشتنِ قبلی» جوابِ درستی نیست.
+  const pkgPath = join(dest, "package.json");
+  const scaffoldPkg = join(src, "package.json");
+  if (existsSync(pkgPath) && existsSync(scaffoldPkg)) {
+    try {
+      const older = JSON.parse(readFileSync(pkgPath, "utf8"));
+      const fresh = JSON.parse(readFileSync(scaffoldPkg, "utf8"));
+      for (const field of ["dependencies", "devDependencies"]) {
+        if (!older[field]) continue;
+        fresh[field] = { ...older[field], ...(fresh[field] || {}) };
+        fresh[field] = Object.fromEntries(Object.entries(fresh[field]).sort(([a], [b]) => a.localeCompare(b)));
+      }
+      writeFileSync(pkgPath, `${JSON.stringify(fresh, null, 2)}
+`, "utf8");
+      merged.push("package.json (وابستگی‌های قبلی حفظ شد)");
+    } catch (err) {
+      return { ok: false, reason: `package.json خوانده نشد: ${err.message}` };
+    }
+  }
+
+  return { ok: true, moved: false, kept, merged };
+}
+
 export function composeServicesFor(stack) {
   const services = [];
   for (const techId of Object.values(stack || {})) {
@@ -596,6 +667,17 @@ export async function applyTechnology({
       if (dryRun) continue;
       mkdirSync(join(projectPath, step.path), { recursive: true });
       performed.push({ kind: "mkdir", path: step.path });
+      continue;
+    }
+
+    if (step.kind === "mergeApp") {
+      planned.push({ kind: "mergeApp", from: step.from, to: step.to });
+      if (dryRun) continue;
+      const res = mergeScaffoldedApp(projectPath, step);
+      // پوشهٔ موقت در هر حالتی پاک می‌شود — نه در موفقیت بماند نه در شکست.
+      rmSync(join(projectPath, step.from.split("/")[0]), { recursive: true, force: true });
+      performed.push({ kind: "mergeApp", from: step.from, to: step.to, ...res });
+      if (!res.ok) return { ok: false, error: `ادغامِ ${step.to} انجام نشد: ${res.reason}`, steps: performed };
       continue;
     }
 

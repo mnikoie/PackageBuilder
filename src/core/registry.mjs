@@ -1023,7 +1023,12 @@ export const TECHNOLOGIES = [
       steps: [
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "mkdir", path: "apps" },
-        { kind: "cli", command: "npx --yes @nestjs/cli@latest new apps/api --skip-git --skip-install --package-manager pnpm" },
+        // اسکافولدِ Nest روی پوشهٔ ناخالی شکست می‌خورد («A merge conflicted on
+        // path /apps/api/package.json») — و اگر افزونه‌ای مثلِ Sentry یا
+        // OpenAPI زودتر نصب شده باشد، پوشه همیشه ناخالی است. پس در پوشهٔ موقت
+        // ساخته و بعد ادغام می‌شود.
+        { kind: "cli", command: "npx --yes @nestjs/cli@latest new .pb-scaffold/api --skip-git --skip-install --package-manager pnpm" },
+        { kind: "mergeApp", from: ".pb-scaffold/api", to: "apps/api" },
         { kind: "cli", command: "pnpm install" },
         { kind: "env", vars: { API_PORT: "4000" } },
       ],
@@ -1990,6 +1995,7 @@ export function describeApply(techId) {
     else if (step.kind === "pnpmAddDev") out.push(`نصبِ پکیجِ توسعه: ${step.packages.join("، ")}`);
     else if (step.kind === "writeFile") out.push(`ساختِ فایل: ${step.path}`);
     else if (step.kind === "mkdir") out.push(`ساختِ پوشه: ${step.path}`);
+    else if (step.kind === "mergeApp") out.push(`ادغامِ اسکافولد در ${step.to} — فایل‌های موجود دست نمی‌خورند`);
     else if (step.kind === "pnpmWorkspace") out.push("اطمینان از اینکه pnpm-workspace.yaml بخشِ packages دارد");
     else if (step.kind === "env") out.push(`متغیرهای env: ${Object.keys(step.vars).join("، ")}`);
     else if (step.kind === "composeService") {
@@ -2029,7 +2035,7 @@ const DETECT_KINDS = new Set([
   "file", "npm", "npmRoot", "npmInstalled", "dockerService", "pythonVenv", "pythonPackage", "envVar",
   "pnpmWorkspacePackages", "all", "any",
 ]);
-const APPLY_KINDS = new Set(["cli", "env", "file", "composeService", "writeFile", "pnpmWorkspace", "pnpmAddDev", "pnpmAdd", "mkdir"]);
+const APPLY_KINDS = new Set(["cli", "env", "file", "composeService", "writeFile", "pnpmWorkspace", "pnpmAddDev", "pnpmAdd", "mkdir", "mergeApp"]);
 const REMOVE_KINDS = new Set(["cli", "deleteFile", "composeDown"]);
 
 /**
