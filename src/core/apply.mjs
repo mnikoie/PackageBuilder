@@ -1060,9 +1060,16 @@ export function writeDotEnvValues(projectPath, vars, { force = [] } = {}) {
   const file = join(projectPath, ".env");
   const existing = existsSync(file) ? readFileSync(file, "utf8") : "";
   const present = new Set();
+  // کلیدی که هست ولی مقدارش خالی است، در عمل «نیست»: نه برنامه با آن کار
+  // می‌کند نه کاربر می‌داند باید چه بگذارد. در .env واقعی دیده شد که
+  // AUTH_SECRET بعد از اصلاحِ رجیستری هم خالی ماند، چون اینجا «موجود» به
+  // حساب می‌آمد و رد می‌شد.
+  const blank = new Set();
   for (const line of existing.split(/\r?\n/)) {
-    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=/);
-    if (m) present.add(m[1]);
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    if (!m) continue;
+    present.add(m[1]);
+    if (m[2].trim() === "") blank.add(m[1]);
   }
   // مقدارِ موجود عمداً دست نمی‌خورد (ممکن است کاربر خودش تنظیمش کرده باشد) —
   // مگر اینکه فراخوان صریح بگوید این کلید باید اصلاح شود. تنها کاربردش الان
@@ -1072,7 +1079,11 @@ export function writeDotEnvValues(projectPath, vars, { force = [] } = {}) {
   // می‌شد و کانتینر بالا نمی‌آمد.
   const forced = new Set(force);
   const missing = Object.entries(vars).filter(([k]) => !present.has(k));
-  const overwrite = Object.entries(vars).filter(([k]) => present.has(k) && forced.has(k));
+  // خطِ خالی هم پر می‌شود — ولی فقط با مقداری که خودش خالی نیست، وگرنه
+  // کلیدهای بیرونی (SENTRY_DSN) بی‌دلیل بازنویسی می‌شوند.
+  const overwrite = Object.entries(vars).filter(
+    ([k, v]) => present.has(k) && (forced.has(k) || (blank.has(k) && String(v ?? "").trim() !== "")),
+  );
 
   if (overwrite.length) {
     let text = existing;
@@ -1082,7 +1093,12 @@ export function writeDotEnvValues(projectPath, vars, { force = [] } = {}) {
     if (text !== existing) {
       writeFileSync(file, text, "utf8");
       const after = missing.length ? writeDotEnvValues(projectPath, Object.fromEntries(missing)) : { added: [] };
-      return { changed: true, added: after.added, corrected: overwrite.map(([k]) => k) };
+      return {
+        changed: true,
+        added: after.added,
+        corrected: overwrite.map(([k]) => k).filter((k) => !blank.has(k)),
+        filled: overwrite.map(([k]) => k).filter((k) => blank.has(k)),
+      };
     }
   }
 

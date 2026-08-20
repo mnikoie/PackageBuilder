@@ -2102,9 +2102,14 @@ export function secretsFor(techId) {
   }));
 }
 
-/** نامِ همهٔ رمزهای رجیستری — برای اینکه .env.example جای‌نگه‌دار بگذارد. */
+/**
+ * نامِ رمزهای واقعیِ رجیستری — برای اینکه .env.example جای‌نگه‌دار بگذارد.
+ *
+ * مقدارهای `fixed` بیرون‌اند: نامِ کاربرِ MinIO رمز نیست و پنهان‌کردنش نقشه را
+ * غلط می‌کند — کاربر `MINIO_ROOT_USER=change-me` می‌دید و نمی‌دانست `app` است.
+ */
 export const ALL_SECRET_NAMES = new Set(
-  TECHNOLOGIES.flatMap((t) => (t.apply?.secrets || []).map((x) => x.name)),
+  TECHNOLOGIES.flatMap((t) => (t.apply?.secrets || []).filter((x) => !x.fixed).map((x) => x.name)),
 );
 
 export function describeApply(techId) {

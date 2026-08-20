@@ -19,8 +19,10 @@ import {
   applyEnvVars, generateCompose, composeServicesFor, nextDecisionNumber,
   writeDecisionDoc, updateStackConfig, applyTechnology, revertTechnology, removeEnvVars,
   mergeScaffoldedApp, randomSecret, resolveSecrets, maskSecrets, readDotEnv, SECRET_PLACEHOLDER,
+  writeDotEnvValues,
   ensurePnpmWorkspace, describeLeftovers, GENERATED_MARKER,
 } from "../src/core/apply.mjs";
+import { ALL_SECRET_NAMES } from "../src/core/registry.mjs";
 import { scaffoldProject } from "../src/core/scaffold.mjs";
 import { technologyById } from "../src/core/registry.mjs";
 import { decisionHistory, findDecisionCommit, isClean } from "../src/core/git.mjs";
@@ -725,5 +727,47 @@ describe("رمزها", () => {
 
   test("فایلِ نبود → شیءِ خالی، نه خطا", () => {
     assert.deepEqual(readDotEnv(join(dir, "nope")), {});
+  });
+});
+
+describe("خطِ خالی در .env", () => {
+  // این از یک `.env` واقعی آمد: AUTH_SECRET در نصبِ قدیمی خالی نوشته شده بود،
+  // و بعد از اصلاحِ رجیستری هم خالی ماند — چون نویسنده کلیدِ خالی را «موجود»
+  // می‌دید و رد می‌کرد. کاربر یک خطِ خالی داشت و هیچ راهی برای فهمیدنش.
+  let dir;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "pb-blank-")); });
+
+  test("کلیدِ خالی پر می‌شود", () => {
+    writeFileSync(join(dir, ".env"), "AUTH_SECRET=\n");
+    const res = writeDotEnvValues(dir, { AUTH_SECRET: "the-real-one" });
+    assert.deepEqual(res.filled, ["AUTH_SECRET"]);
+    assert.match(readFileSync(join(dir, ".env"), "utf8"), /AUTH_SECRET=the-real-one/);
+  });
+
+  test("مقدارِ خالی روی کلیدِ خالی نمی‌نشیند", () => {
+    // SENTRY_DSN از بیرون می‌آید؛ خالی‌کردنِ دوباره‌اش کاری نمی‌کند جز نویز.
+    writeFileSync(join(dir, ".env"), "SENTRY_DSN=\n");
+    const before = readFileSync(join(dir, ".env"), "utf8");
+    writeDotEnvValues(dir, { SENTRY_DSN: "" });
+    assert.equal(readFileSync(join(dir, ".env"), "utf8"), before);
+  });
+
+  test("مقدارِ پرشده دست نمی‌خورد", () => {
+    writeFileSync(join(dir, ".env"), "AUTH_SECRET=mine\n");
+    writeDotEnvValues(dir, { AUTH_SECRET: "something-else" });
+    assert.match(readFileSync(join(dir, ".env"), "utf8"), /AUTH_SECRET=mine/);
+  });
+
+  test("فاصلهٔ خالی هم خالی حساب می‌شود", () => {
+    writeFileSync(join(dir, ".env"), "AUTH_SECRET=   \n");
+    writeDotEnvValues(dir, { AUTH_SECRET: "filled" });
+    assert.match(readFileSync(join(dir, ".env"), "utf8"), /AUTH_SECRET=filled/);
+  });
+
+  test("مقدارِ ثابت رمز نیست و در نقشه پنهان نمی‌شود", () => {
+    // MINIO_ROOT_USER در .env.example «change-me» می‌شد و کاربر نمی‌فهمید
+    // که مقدارش app است.
+    assert.ok(!ALL_SECRET_NAMES.has("MINIO_ROOT_USER"));
+    assert.ok(ALL_SECRET_NAMES.has("MINIO_ROOT_PASSWORD"));
   });
 });
