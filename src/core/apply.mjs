@@ -15,8 +15,9 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, rmSync, renameSync, cpSync, statSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { spawnSync } from "node:child_process";
+import { randomBytes } from "node:crypto";
 
-import { technologyById, categoryById, removalFor } from "./registry.mjs";
+import { technologyById, categoryById, removalFor, secretsFor, ALL_SECRET_NAMES } from "./registry.mjs";
 import { probeProject, PRESENT } from "./detect.mjs";
 import { resolveRegistry } from "./resolve.mjs";
 import { persianDate } from "./skeleton.mjs";
@@ -33,6 +34,85 @@ export const GENERATED_MARKER = "# ساختهٔ PackageBuilder — دست‌نو
  * چرا فقط اضافه و هرگز تغییر: ممکن است کاربر مقدارِ واقعی گذاشته باشد.
  * بازنویسی‌اش یعنی خراب‌کردنِ کارش.
  */
+/** جای‌نگه‌داری که در `.env.example` (که کامیت می‌شود) به‌جای رمز می‌نشیند. */
+export const SECRET_PLACEHOLDER = "change-me";
+
+/**
+ * رمزِ تصادفی.
+ *
+ * base64url عمدی است: `@` و `:` و `/` تولید نمی‌کند، پس داخلِ
+ * `postgresql://user:PASS@host` ساختارِ URL را نمی‌شکند — که با base64 معمولی
+ * می‌شکست.
+ */
+export function randomSecret(length = 20) {
+  return randomBytes(Math.ceil((length * 3) / 4))
+    .toString("base64url")
+    .slice(0, length);
+}
+
+/**
+ * پنهان‌کردنِ رمز در مقدارهایی که به `.env.example` می‌روند.
+ *
+ * فقط نام کافی نیست: رمز داخلِ رشته‌های دیگر هم می‌نشیند
+ * (`postgresql://app:PASS@host/db`). این تابع خودِ مقدار را می‌گردد.
+ */
+export function maskSecrets(vars, secretValues = {}) {
+  const values = Object.values(secretValues).filter((v) => typeof v === "string" && v.length >= 4);
+  const out = {};
+  for (const [k, v] of Object.entries(vars)) {
+    if (typeof v !== "string") { out[k] = v; continue; }
+    let masked = v;
+    for (const secret of values) masked = masked.split(secret).join(SECRET_PLACEHOLDER);
+    out[k] = masked;
+  }
+  return out;
+}
+
+/** مقدارهای فعلیِ `.env` — کلید به مقدار. */
+export function readDotEnv(projectPath) {
+  const file = join(projectPath, ".env");
+  if (!existsSync(file)) return {};
+  const out = {};
+  for (const line of readFileSync(file, "utf8").split(/\r?\n/)) {
+    const m = line.match(/^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=(.*)$/);
+    if (m) out[m[1]] = m[2].trim();
+  }
+  return out;
+}
+
+/**
+ * تصمیم‌گیری دربارهٔ رمزهای یک تکنولوژی.
+ *
+ * ترتیبِ اولویت عمدی است:
+ * ۱. مقداری که **از قبل** در `.env` هست — چون شاید کانتینر با همان ساخته شده
+ *    باشد و عوض‌کردنش یعنی دیتابیسی که دیگر باز نمی‌شود.
+ * ۲. چیزی که کاربر داده.
+ * ۳. تصادفی.
+ *
+ * `fixed` برای مقدارِ غیرِ رمز است (نامِ کاربر)، که پرسیدنی نیست.
+ */
+export function resolveSecrets(projectPath, techId, provided = {}) {
+  const current = readDotEnv(projectPath);
+  const out = {};
+  const origin = {};
+  for (const sec of secretsFor(techId)) {
+    if (sec.fixed) {
+      out[sec.name] = current[sec.name] || sec.fixed;
+      origin[sec.name] = "fixed";
+    } else if (current[sec.name] && current[sec.name] !== SECRET_PLACEHOLDER) {
+      out[sec.name] = current[sec.name];
+      origin[sec.name] = "kept";
+    } else if (typeof provided[sec.name] === "string" && provided[sec.name].trim()) {
+      out[sec.name] = provided[sec.name].trim();
+      origin[sec.name] = "given";
+    } else {
+      out[sec.name] = randomSecret(sec.length);
+      origin[sec.name] = "generated";
+    }
+  }
+  return { values: out, origin };
+}
+
 export function applyEnvVars(projectPath, { techLabel, vars }) {
   const file = join(projectPath, ".env.example");
   const existing = existsSync(file) ? readFileSync(file, "utf8") : "";
@@ -48,7 +128,8 @@ export function applyEnvVars(projectPath, { techLabel, vars }) {
   const block = [
     "",
     `# ---- ${techLabel} ----`,
-    ...missing.map(([name, value]) => `${name}=${value}`),
+    // `.env.example` کامیت می‌شود، پس مقدارِ واقعیِ رمز هرگز داخلش نمی‌رود.
+    ...missing.map(([name, value]) => `${name}=${ALL_SECRET_NAMES.has(name) ? SECRET_PLACEHOLDER : value}`),
     "",
   ].join("\n");
 
@@ -576,6 +657,8 @@ export function updateStackConfig(projectPath, category, techId) {
  */
 export async function applyTechnology({
   projectPath, techId, terminal, dryRun = false, commit = true, date = new Date(),
+  // رمزهایی که کاربر در UI داده. نبودشان یعنی «خودت بساز».
+  secrets = {},
   // چک‌کنندهٔ پورتِ منتشرشده. قابلِ تزریق است چون در تست، ترمینالِ تقلبی واقعاً
   // «docker compose up» نمی‌زند — پس چکِ واقعی همیشه شکست می‌خورد.
   dockerPorts = dockerPublishedPorts,
@@ -624,6 +707,15 @@ export async function applyTechnology({
   const planned = [];
   const performed = [];
 
+  // رمزها **قبل از** هر نوشتنی معلوم می‌شوند: هم `.env` و هم فایلِ compose
+  // باید دقیقاً همان مقدار را ببینند. اگر دو بار ساخته می‌شد، کانتینر با یک
+  // رمز بالا می‌آمد و برنامه با رمزِ دیگری در می‌زد.
+  const secretPlan = resolveSecrets(projectPath, techId, secrets);
+  if (!dryRun && Object.keys(secretPlan.values).length) {
+    writeDotEnvValues(projectPath, secretPlan.values);
+    performed.push({ kind: "secrets", names: Object.keys(secretPlan.values), origin: secretPlan.origin });
+  }
+
   // پورت‌های این تکنولوژی یک‌بار و **پیش از** نوشتنِ هر آدرسی معلوم می‌شوند.
   //
   // چرا تنبل: فقط تکنولوژی‌هایی که سرویسِ Docker دارند به این نیاز دارند، و
@@ -644,14 +736,14 @@ export async function applyTechnology({
     return portsMemo;
   };
 
-  /** `${VAR}` را با پورتِ واقعی جایگزین می‌کند؛ ناشناخته‌ها دست‌نخورده می‌مانند. */
-  const withRealPorts = (vars) => {
+  /** `${VAR}` را با پورت و رمزِ واقعی جایگزین می‌کند؛ ناشناخته‌ها دست‌نخورده. */
+  const withRealValues = (vars) => {
     if (!Object.values(vars).some((v) => typeof v === "string" && v.includes("${"))) return vars;
-    const portVars = getPorts().vars;
+    const known = { ...getPorts().vars, ...secretPlan.values };
     const out = {};
     for (const [k, v] of Object.entries(vars)) {
       out[k] = typeof v === "string"
-        ? v.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (m, name) => portVars[name] ?? m)
+        ? v.replace(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g, (m, name) => known[name] ?? m)
         : v;
     }
     return out;
@@ -762,10 +854,16 @@ export async function applyTechnology({
     } else if (step.kind === "env") {
       planned.push({ kind: "env", vars: Object.keys(step.vars) });
       if (dryRun) continue;
+      const real = withRealValues(step.vars);
+      // هر دو فایل: `.env.example` نقشه است (با جای‌نگه‌دار به‌جای رمز) و
+      // `.env` مقدارِ واقعی. قبلاً فقط اولی نوشته می‌شد و `.env` جز پورت هیچ
+      // نداشت — یعنی برنامه بی DATABASE_URL می‌ماند و کاربر باید دستی
+      // کپی می‌کرد.
       performed.push({
         kind: "env",
-        ...applyEnvVars(projectPath, { techLabel: tech.label, vars: withRealPorts(step.vars) }),
+        ...applyEnvVars(projectPath, { techLabel: tech.label, vars: maskSecrets(real, secretPlan.values) }),
       });
+      performed.push({ kind: "dotenv", ...writeDotEnvValues(projectPath, real) });
     } else if (step.kind === "composeService") {
       planned.push({ kind: "composeService", service: step.service });
     } else if (step.kind === "file") {

@@ -206,6 +206,24 @@
   .modal > header .x:hover { color: var(--text); }
   .modal > .mbody { padding: 16px 18px; overflow-y: auto; }
   .modal > footer { padding: 12px 18px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-start; }
+  .secret { margin: 14px 0; }
+  .secret label { display: block; font-size: .8rem; margin-bottom: 6px; }
+  .secret-line { display: flex; gap: 8px; }
+  .secret-line input {
+    flex: 1; font-family: ui-monospace, Consolas, monospace; font-size: .8rem;
+    padding: 8px 10px; border-radius: 6px; border: 1px solid var(--border);
+    background: var(--bg); color: var(--text); direction: ltr; text-align: left;
+  }
+  .secret-line button {
+    background: transparent; color: var(--muted); border: 1px solid var(--border);
+    border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: .78rem; white-space: nowrap;
+  }
+  .secret-line button:hover { color: var(--text); }
+  .secret-name {
+    font-family: ui-monospace, Consolas, monospace; font-size: .68rem;
+    color: var(--muted); margin-top: 5px; direction: ltr; text-align: left;
+  }
+  .secret-note { font-size: .75rem; color: var(--muted); margin-top: 16px; line-height: 1.7; }
   .modal footer button {
     padding: 7px 18px; border-radius: 8px; cursor: pointer; font-weight: 600;
     border: 1px solid var(--border); background: transparent; color: var(--text);
@@ -365,6 +383,11 @@
       namePlaceholder: "پیش‌فرض: نامِ خودِ پوشه",
       create: "بساز",
       cancel: "بی‌خیال",
+      secretsTitle: "رمزها",
+      secretsLead: "این‌ها هم در .env می‌نشینند هم در فایلِ compose. پیش‌فرض تصادفی است و همین‌طور گذاشتنش درست است.",
+      secretsNote: "مقدارِ واقعی فقط در .env می‌رود که کامیت نمی‌شود؛ در .env.example جای‌نگه‌دار می‌نشیند.",
+      secretsGo: "نصب کن",
+      regenerate: "دوباره بساز",
       ok: "فهمیدم",
       close: "بستن",
       groupHelp: "توضیحِ این گروه",
@@ -444,6 +467,11 @@
       namePlaceholder: "default: the folder's own name",
       create: "Create",
       cancel: "Cancel",
+      secretsTitle: "Passwords",
+      secretsLead: "These go into .env and into the compose file together. The default is random, and leaving it as is works.",
+      secretsNote: "The real value only lands in .env, which is not committed; .env.example gets a placeholder.",
+      secretsGo: "Install",
+      regenerate: "Regenerate",
       ok: "Got it",
       close: "Close",
       groupHelp: "About this group",
@@ -539,6 +567,77 @@
   /**
    * مودال. `build` بدنه را می‌سازد تا هر جور محتوایی بشود گذاشت.
    */
+  /** رمزِ تصادفی، همان‌جا در مرورگر. سرور دخالتی ندارد. */
+  function makeSecret(length) {
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+    const bytes = new Uint32Array(length);
+    crypto.getRandomValues(bytes);
+    // فقط حرف و رقم: کاراکترِ خاص داخلِ DATABASE_URL ساختارِ URL را می‌شکند.
+    return Array.from(bytes, (n) => alphabet[n % alphabet.length]).join("");
+  }
+
+  /**
+   * پرسیدنِ رمزها قبل از نصب.
+   *
+   * پیش‌فرض تصادفی است تا کاربر مجبور نباشد چیزی از خودش دربیاورد، ولی
+   * می‌تواند عوضش کند. مقدار در همان لحظه هم به `.env` می‌رود هم به فایلِ
+   * compose، پس دیگر جایی `change-me` جا نمی‌ماند.
+   */
+  function askSecrets(opt) {
+    const asked = (opt.secrets || []).filter((x) => !x.fixed);
+    if (!asked.length) return Promise.resolve({});
+
+    return new Promise((resolve) => {
+      const inputs = new Map();
+      let done = false;
+
+      modal(`${opt.label} — ${T("secretsTitle")}`, (b) => {
+        b.append(el("p", "lead", T("secretsLead")));
+        for (const sec of asked) {
+          const row = el("div", "secret");
+          row.append(el("label", null, sec.label));
+          const line = el("div", "secret-line");
+          const input = document.createElement("input");
+          input.type = "text";
+          input.spellcheck = false;
+          input.value = makeSecret(sec.length);
+          const again = el("button", null, T("regenerate"));
+          again.addEventListener("click", () => { input.value = makeSecret(sec.length); });
+          line.append(input, again);
+          row.append(line);
+          row.append(el("div", "secret-name", sec.name));
+          b.append(row);
+          inputs.set(sec.name, input);
+        }
+        b.append(el("div", "secret-note", T("secretsNote")));
+      }, {
+        actions: [
+          {
+            label: T("secretsGo"),
+            primary: true,
+            onClick: () => {
+              done = true;
+              const out = {};
+              for (const [name, input] of inputs) out[name] = input.value.trim();
+              resolve(out);
+            },
+          },
+          { label: T("cancel"), onClick: () => { done = true; resolve(null); } },
+        ],
+      });
+
+      // بستن با × یا Escape هم یعنی انصراف، نه نصب با مقدارِ ناخواسته.
+      const watcher = setInterval(() => {
+        if (done) return clearInterval(watcher);
+        if (!document.querySelector(".backdrop")) {
+          clearInterval(watcher);
+          done = true;
+          resolve(null);
+        }
+      }, 120);
+    });
+  }
+
   function modal(title, build, { danger = false, actions = null } = {}) {
     closeModal();
     const back = el("div", "backdrop");
@@ -776,8 +875,16 @@
   let busy = false;
 
   /** یک تصمیم را اعمال یا برمی‌گرداند. فرمان‌ها در ترمینالِ کنار دیده می‌شوند. */
-  async function decide(kind, path, techId, label, btn) {
+  async function decide(kind, path, techId, label, btn, opt = null) {
     if (busy) return;
+
+    // رمزها قبل از هر کاری پرسیده می‌شوند — بعد از شروعِ نصب دیگر دیر است.
+    let secrets = {};
+    if (kind === "apply" && opt && (opt.secrets || []).some((x) => !x.fixed)) {
+      secrets = await askSecrets(opt);
+      if (secrets === null) return;
+    }
+
     busy = true;
     const original = btn.textContent;
     btn.textContent = T("running");
@@ -787,7 +894,7 @@
       const res = await fetch("/api/" + kind, {
         method: "POST",
         headers: { "Content-Type": "application/json", "x-pb-token": TOKEN },
-        body: JSON.stringify({ path, tech: techId }),
+        body: JSON.stringify({ path, tech: techId, secrets }),
       });
       const r = await res.json();
 
@@ -991,7 +1098,7 @@
         goBtn.title = !termReady
           ? T("termNotReady")
           : installed ? T("installed") : blocked ? T("needPrereq") : "";
-        goBtn.addEventListener("click", () => decide("apply", path, opt.id, opt.label, goBtn));
+        goBtn.addEventListener("click", () => decide("apply", path, opt.id, opt.label, goBtn, opt));
 
         const undoBtn = el("button", "undo", T("remove"));
         undoBtn.disabled = !installed || !termReady;

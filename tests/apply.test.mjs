@@ -18,7 +18,7 @@ import { spawnSync } from "node:child_process";
 import {
   applyEnvVars, generateCompose, composeServicesFor, nextDecisionNumber,
   writeDecisionDoc, updateStackConfig, applyTechnology, revertTechnology, removeEnvVars,
-  mergeScaffoldedApp,
+  mergeScaffoldedApp, randomSecret, resolveSecrets, maskSecrets, readDotEnv, SECRET_PLACEHOLDER,
   ensurePnpmWorkspace, describeLeftovers, GENERATED_MARKER,
 } from "../src/core/apply.mjs";
 import { scaffoldProject } from "../src/core/scaffold.mjs";
@@ -643,5 +643,87 @@ describe("ادغامِ اسکافولد در پوشه‌ای که از قبل چ
     const res = mergeScaffoldedApp(dir, { from: ".pb-scaffold/api", to: "apps/api" });
     assert.equal(res.ok, false);
     assert.match(res.reason, /ساخته نشد/);
+  });
+});
+
+describe("رمزها", () => {
+  let dir;
+  beforeEach(() => { dir = mkdtempSync(join(tmpdir(), "pb-sec-")); });
+
+  test("رمزِ ساخته‌شده ساختارِ URL را نمی‌شکند", () => {
+    for (let i = 0; i < 200; i++) {
+      const secret = randomSecret(20);
+      assert.equal(secret.length, 20);
+      // این سه کاراکتر داخلِ postgresql://user:PASS@host آدرس را می‌شکنند.
+      assert.ok(!/[@:/]/.test(secret), `کاراکترِ ممنوع در ${secret}`);
+    }
+  });
+
+  test("دو بار صدا زدن، دو مقدارِ متفاوت می‌دهد", () => {
+    assert.notEqual(randomSecret(20), randomSecret(20));
+  });
+
+  test("طولِ خواسته‌شده رعایت می‌شود", () => {
+    assert.equal(randomSecret(8).length, 8);
+    assert.equal(randomSecret(32).length, 32);
+  });
+
+  test("نبودِ مقدار → تصادفی", () => {
+    const { values, origin } = resolveSecrets(dir, "postgres");
+    assert.equal(origin.POSTGRES_PASSWORD, "generated");
+    assert.equal(values.POSTGRES_PASSWORD.length, 20);
+  });
+
+  test("مقدارِ کاربر ترجیح دارد", () => {
+    const { values, origin } = resolveSecrets(dir, "postgres", { POSTGRES_PASSWORD: "  mine  " });
+    assert.equal(values.POSTGRES_PASSWORD, "mine");
+    assert.equal(origin.POSTGRES_PASSWORD, "given");
+  });
+
+  test("مقدارِ موجود در .env بر همه‌چیز مقدم است", () => {
+    // چون کانتینر شاید با همان ساخته شده باشد؛ عوض‌کردنش یعنی دیتابیسی که
+    // دیگر باز نمی‌شود.
+    writeFileSync(join(dir, ".env"), "POSTGRES_PASSWORD=already-here\n");
+    const { values, origin } = resolveSecrets(dir, "postgres", { POSTGRES_PASSWORD: "new-one" });
+    assert.equal(values.POSTGRES_PASSWORD, "already-here");
+    assert.equal(origin.POSTGRES_PASSWORD, "kept");
+  });
+
+  test("جای‌نگه‌دار مقدارِ واقعی به حساب نمی‌آید", () => {
+    writeFileSync(join(dir, ".env"), `POSTGRES_PASSWORD=${SECRET_PLACEHOLDER}\n`);
+    const { origin } = resolveSecrets(dir, "postgres", { POSTGRES_PASSWORD: "real" });
+    assert.equal(origin.POSTGRES_PASSWORD, "given");
+  });
+
+  test("مقدارِ ثابت پرسیده نمی‌شود", () => {
+    const { values, origin } = resolveSecrets(dir, "minio");
+    assert.equal(values.MINIO_ROOT_USER, "app");
+    assert.equal(origin.MINIO_ROOT_USER, "fixed");
+    assert.equal(origin.MINIO_ROOT_PASSWORD, "generated");
+  });
+
+  test("رمز داخلِ رشته‌های دیگر هم پنهان می‌شود", () => {
+    // این را آزمایشِ زنده پیدا کرد: POSTGRES_PASSWORD جای‌نگه‌دار می‌گرفت ولی
+    // DATABASE_URL رمز را عیناً به .env.example می‌برد — که کامیت می‌شود.
+    const masked = maskSecrets(
+      { DATABASE_URL: "postgresql://app:s3cret-value@127.0.0.1:5432/app", PORT: "5432" },
+      { POSTGRES_PASSWORD: "s3cret-value" },
+    );
+    assert.equal(masked.DATABASE_URL, `postgresql://app:${SECRET_PLACEHOLDER}@127.0.0.1:5432/app`);
+    assert.equal(masked.PORT, "5432");
+  });
+
+  test("رشتهٔ خیلی کوتاه پنهان نمی‌شود (وگرنه هر متنی خراب می‌شود)", () => {
+    const masked = maskSecrets({ URL: "http://a/app" }, { X: "app" });
+    assert.equal(masked.URL, "http://a/app");
+  });
+
+  test("readDotEnv مقدارها را می‌خواند و کامنت را نه", () => {
+    writeFileSync(join(dir, ".env"), "# توضیح\nA=1\n\nB=two words\n");
+    assert.deepEqual(readDotEnv(dir), { A: "1", B: "two words" });
+  });
+
+  test("فایلِ نبود → شیءِ خالی، نه خطا", () => {
+    assert.deepEqual(readDotEnv(join(dir, "nope")), {});
   });
 });

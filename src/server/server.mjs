@@ -202,6 +202,26 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
    * همان محافظت‌های /api/run: فقط POST، توکنِ صفحه، و بررسیِ مبدأ. چون این هم
    * فرمانِ واقعی روی این کامپیوتر اجرا می‌کند.
    */
+  /**
+   * رمزهای رسیده از صفحه را به شکلِ امن درمی‌آورد.
+   *
+   * فقط کلیدِ معتبرِ env و مقدارِ رشته‌ایِ کوتاه. بی این، هر چیزی از بدنهٔ
+   * درخواست می‌توانست مستقیم داخلِ فایلِ `.env` بنشیند.
+   */
+  function sanitizeSecrets(input) {
+    if (!input || typeof input !== "object") return {};
+    const out = {};
+    for (const [k, v] of Object.entries(input)) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) continue;
+      if (typeof v !== "string") continue;
+      const value = v.trim();
+      // خطِ جدید فایلِ .env را می‌شکند؛ رمز هم هرگز لازمش ندارد.
+      if (!value || value.length > 200 || /[\r\n]/.test(value)) continue;
+      out[k] = value;
+    }
+    return out;
+  }
+
   async function handleDecision(req, res, kind) {
     if (!originAllowed(req)) return sendJson(res, 403, { ok: false, error: "مبدأِ درخواست پذیرفته نشد." });
     if (!tokenMatches(token, req.headers["x-pb-token"])) {
@@ -221,7 +241,11 @@ export function createApp({ host = "127.0.0.1", port = DEFAULT_PORT, terminal } 
 
     try {
       const result = kind === "apply"
-        ? await applyTechnology({ projectPath, techId, terminal: term, dryRun: !!body.dryRun })
+        ? await applyTechnology({
+            projectPath, techId, terminal: term, dryRun: !!body.dryRun,
+            // فقط رشته‌های ساده پذیرفته می‌شوند — هرچه غیرِ آن، نادیده.
+            secrets: sanitizeSecrets(body.secrets),
+          })
         : await revertTechnology({ projectPath, techId, terminal: term });
       return sendJson(res, 200, result);
     } catch (err) {

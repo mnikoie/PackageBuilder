@@ -1164,11 +1164,14 @@ export const TECHNOLOGIES = [
         {
           kind: "composeService", service: "postgres", image: "postgres:17-alpine", ports: [{ container: 5432, host: 5432, env: "POSTGRES_PORT" }],
           // بدونِ POSTGRES_PASSWORD کانتینر بالا نمی‌آید — الزامِ خودِ ایمیج است.
-          environment: { POSTGRES_USER: "app", POSTGRES_PASSWORD: "change-me", POSTGRES_DB: "app" },
+          // رمز از .env می‌آید، نه اینجا — وگرنه دو جا می‌شد و باید دستی
+          // هماهنگ می‌ماند. (compose با --env-file .env می‌خواندش.)
+          environment: { POSTGRES_USER: "app", POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}", POSTGRES_DB: "app" },
           volume: "/var/lib/postgresql/data",
         },
-        { kind: "env", vars: { DATABASE_URL: "postgresql://app:change-me@127.0.0.1:${POSTGRES_PORT}/app" } },
+        { kind: "env", vars: { POSTGRES_PASSWORD: "${POSTGRES_PASSWORD}", DATABASE_URL: "postgresql://app:${POSTGRES_PASSWORD}@127.0.0.1:${POSTGRES_PORT}/app" } },
       ],
+      secrets: [{ name: "POSTGRES_PASSWORD", label: "رمزِ کاربرِ app در PostgreSQL", length: 20 }],
     },
     meta: {
       pros: ["رابطه‌ای و قوی، با پشتیبانیِ JSON", "جستجوی متنی داخلی دارد", "بسیار پایدار"],
@@ -1185,11 +1188,12 @@ export const TECHNOLOGIES = [
       steps: [
         {
           kind: "composeService", service: "mysql", image: "mysql:8", ports: [{ container: 3306, host: 3306, env: "MYSQL_PORT" }],
-          environment: { MYSQL_ROOT_PASSWORD: "change-me", MYSQL_DATABASE: "app" },
+          environment: { MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}", MYSQL_DATABASE: "app" },
           volume: "/var/lib/mysql",
         },
-        { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@127.0.0.1:${MYSQL_PORT}/app" } },
+        { kind: "env", vars: { MYSQL_ROOT_PASSWORD: "${MYSQL_ROOT_PASSWORD}", DATABASE_URL: "mysql://root:${MYSQL_ROOT_PASSWORD}@127.0.0.1:${MYSQL_PORT}/app" } },
       ],
+      secrets: [{ name: "MYSQL_ROOT_PASSWORD", label: "رمزِ کاربرِ root در MySQL", length: 20 }],
     },
     meta: {
       pros: ["رایج‌ترین، میزبانیِ ارزان و فراوان", "ابزارهای مدیریتیِ زیاد"],
@@ -1210,13 +1214,14 @@ export const TECHNOLOGIES = [
           // بی این دو متغیر کانتینر بالا می‌آید ولی بی‌رمز — یعنی هر کسی روی
           // شبکهٔ لوکال به همهٔ داده دسترسی دارد. الزامِ خودِ ایمیج نیست، الزامِ
           // عقل است.
-          environment: { MONGO_INITDB_ROOT_USERNAME: "app", MONGO_INITDB_ROOT_PASSWORD: "change-me", MONGO_INITDB_DATABASE: "app" },
+          environment: { MONGO_INITDB_ROOT_USERNAME: "app", MONGO_INITDB_ROOT_PASSWORD: "${MONGO_PASSWORD}", MONGO_INITDB_DATABASE: "app" },
           volume: "/data/db",
         },
         // authSource=admin لازم است: کاربرِ ریشه در دیتابیسِ admin ساخته می‌شود،
         // نه در دیتابیسِ app. بی آن، ورود رد می‌شود.
-        { kind: "env", vars: { MONGO_URL: "mongodb://app:change-me@127.0.0.1:${MONGO_PORT}/app?authSource=admin" } },
+        { kind: "env", vars: { MONGO_PASSWORD: "${MONGO_PASSWORD}", MONGO_URL: "mongodb://app:${MONGO_PASSWORD}@127.0.0.1:${MONGO_PORT}/app?authSource=admin" } },
       ],
+      secrets: [{ name: "MONGO_PASSWORD", label: "رمزِ کاربرِ app در MongoDB", length: 20 }],
     },
     meta: {
       pros: ["شکلِ داده از قبل تعریف‌شده لازم ندارد", "برای دادهٔ تودرتو و متغیر راحت", "مقیاسِ افقیِ آسان"],
@@ -1233,10 +1238,14 @@ export const TECHNOLOGIES = [
       steps: [
         {
           kind: "composeService", service: "mariadb", image: "mariadb:11", ports: [{ container: 3306, host: 3306, env: "MARIADB_PORT" }],
-          environment: { MARIADB_ROOT_PASSWORD: "change-me", MARIADB_DATABASE: "app", MARIADB_USER: "app", MARIADB_PASSWORD: "change-me" },
+          environment: { MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD}", MARIADB_DATABASE: "app", MARIADB_USER: "app", MARIADB_PASSWORD: "${MARIADB_PASSWORD}" },
           volume: "/var/lib/mysql",
         },
-        { kind: "env", vars: { DATABASE_URL: "mysql://app:change-me@127.0.0.1:${MARIADB_PORT}/app" } },
+        { kind: "env", vars: { MARIADB_ROOT_PASSWORD: "${MARIADB_ROOT_PASSWORD}", MARIADB_PASSWORD: "${MARIADB_PASSWORD}", DATABASE_URL: "mysql://app:${MARIADB_PASSWORD}@127.0.0.1:${MARIADB_PORT}/app" } },
+      ],
+      secrets: [
+        { name: "MARIADB_ROOT_PASSWORD", label: "رمزِ کاربرِ root در MariaDB", length: 20 },
+        { name: "MARIADB_PASSWORD", label: "رمزِ کاربرِ app در MariaDB", length: 20 },
       ],
     },
     meta: {
@@ -1490,11 +1499,12 @@ export const TECHNOLOGIES = [
         {
           kind: "composeService", service: "grafana", image: "grafana/grafana:11.5.1",
           ports: [{ container: 3000, host: 3000, env: "GRAFANA_PORT" }],
-          environment: { GF_SECURITY_ADMIN_PASSWORD: "change-me", GF_USERS_ALLOW_SIGN_UP: '"false"' },
+          environment: { GF_SECURITY_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD}", GF_USERS_ALLOW_SIGN_UP: '"false"' },
           volume: "/var/lib/grafana",
         },
-        { kind: "env", vars: { GRAFANA_ADMIN_PASSWORD: "change-me" } },
+        { kind: "env", vars: { GRAFANA_ADMIN_PASSWORD: "${GRAFANA_ADMIN_PASSWORD}" } },
       ],
+      secrets: [{ name: "GRAFANA_ADMIN_PASSWORD", label: "رمزِ ورودِ admin به Grafana", length: 16 }],
     },
     meta: {
       pros: ["همه‌چیز روی سرورِ خودت — هیچ داده‌ای بیرون نمی‌رود", "هزینهٔ ماهانه ندارد", "نمودار و هشدار و لاگ در یک جا"],
@@ -1707,11 +1717,13 @@ export const TECHNOLOGIES = [
       steps: [
         {
           kind: "composeService", service: "meilisearch", image: "getmeili/meilisearch:v1.11", ports: [{ container: 7700, host: 7700, env: "MEILI_PORT" }],
-          environment: { MEILI_MASTER_KEY: "change-me", MEILI_NO_ANALYTICS: '"true"' },
+          environment: { MEILI_MASTER_KEY: "${MEILI_MASTER_KEY}", MEILI_NO_ANALYTICS: '"true"' },
           volume: "/meili_data",
         },
-        { kind: "env", vars: { MEILI_URL: "http://127.0.0.1:${MEILI_PORT}", MEILI_MASTER_KEY: "change-me" } },
+        { kind: "env", vars: { MEILI_URL: "http://127.0.0.1:${MEILI_PORT}", MEILI_MASTER_KEY: "${MEILI_MASTER_KEY}" } },
       ],
+      // Meilisearch کلیدِ کوتاه‌تر از ۱۶ بایت را رد می‌کند.
+      secrets: [{ name: "MEILI_MASTER_KEY", label: "کلیدِ اصلیِ Meilisearch", length: 24 }],
     },
     meta: {
       pros: ["راه‌اندازیِ خیلی ساده", "سریع، با تحملِ غلطِ تایپی", "با فارسی خوب کار می‌کند"],
@@ -1754,10 +1766,15 @@ export const TECHNOLOGIES = [
           kind: "composeService", service: "minio", image: "minio/minio:latest", ports: [{ container: 9000, host: 9000, env: "MINIO_PORT" }, { container: 9001, host: 9001, env: "MINIO_CONSOLE_PORT" }],
           // MinIO بدونِ command سرور را بالا نمی‌آورد.
           command: 'server /data --console-address ":9001"',
-          environment: { MINIO_ROOT_USER: "app", MINIO_ROOT_PASSWORD: "change-me-min-8" },
+          environment: { MINIO_ROOT_USER: "${MINIO_ROOT_USER}", MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}" },
           volume: "/data",
         },
-        { kind: "env", vars: { MINIO_ENDPOINT: "http://127.0.0.1:${MINIO_PORT}", MINIO_BUCKET: "app" } },
+        { kind: "env", vars: { MINIO_ENDPOINT: "http://127.0.0.1:${MINIO_PORT}", MINIO_BUCKET: "app", MINIO_ROOT_USER: "${MINIO_ROOT_USER}", MINIO_ROOT_PASSWORD: "${MINIO_ROOT_PASSWORD}" } },
+      ],
+      // خودِ MinIO رمزِ کوتاه‌تر از ۸ کاراکتر را رد می‌کند و کانتینر بالا نمی‌آید.
+      secrets: [
+        { name: "MINIO_ROOT_USER", label: "نامِ کاربرِ ادمینِ MinIO", fixed: "app" },
+        { name: "MINIO_ROOT_PASSWORD", label: "رمزِ ادمینِ MinIO", length: 20 },
       ],
     },
     meta: {
@@ -1985,6 +2002,28 @@ export const REMOVALS = {
  * پس هیچ‌وقت با واقعیت ناهمگام نمی‌شود. همان قاعدهٔ همیشگی: توضیح باید از
  * همان جایی بیاید که کار از آنجا انجام می‌شود.
  */
+/**
+ * رمزهایی که این تکنولوژی لازم دارد.
+ *
+ * چرا در داده و نه در کد: تا UI بتواند **قبل از نصب** بپرسدشان و همان مقدار
+ * هم در `.env` بنشیند هم در compose — نه اینکه یک `change-me` جا بماند و
+ * کاربر خودش دنبالش بگردد.
+ */
+export function secretsFor(techId) {
+  const tech = technologyById(techId);
+  return (tech?.apply?.secrets || []).map((x) => ({
+    name: x.name,
+    label: x.label,
+    length: x.fixed ? 0 : x.length || 20,
+    fixed: x.fixed || null,
+  }));
+}
+
+/** نامِ همهٔ رمزهای رجیستری — برای اینکه .env.example جای‌نگه‌دار بگذارد. */
+export const ALL_SECRET_NAMES = new Set(
+  TECHNOLOGIES.flatMap((t) => (t.apply?.secrets || []).map((x) => x.name)),
+);
+
 export function describeApply(techId) {
   const tech = technologyById(techId);
   if (!tech) return [];
@@ -2002,6 +2041,11 @@ export function describeApply(techId) {
       const ports = (step.ports || []).map((x) => x.container).join("، ");
       out.push(`سرویسِ Docker: ${step.service} (ایمیجِ ${step.image}${ports ? `، پورتِ ${ports}` : ""})`);
     }
+  }
+  for (const sec of tech.apply?.secrets || []) {
+    out.push(sec.fixed
+      ? `مقدارِ ثابتِ ${sec.name} = ${sec.fixed}`
+      : `رمز: ${sec.name} — قبل از نصب پرسیده می‌شود (پیش‌فرض: تصادفی)`);
   }
   return out;
 }
