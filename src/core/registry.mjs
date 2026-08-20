@@ -1443,8 +1443,12 @@ export const TECHNOLOGIES = [
       steps: [
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "cli", command: "pnpm --filter web add next-auth" },
-        { kind: "env", vars: { AUTH_SECRET: "", AUTH_URL: "http://localhost:3000" } },
+        { kind: "env", vars: { AUTH_SECRET: "${AUTH_SECRET}", AUTH_URL: "http://localhost:3000" } },
       ],
+      // Auth.js با این کلید توکنِ نشست را امضا و رمز می‌کند. خالی که باشد،
+      // در production بالا نمی‌آید. ۴۴ کاراکتر ≈ همان ۳۲ بایتی که خودش
+      // توصیه می‌کند.
+      secrets: [{ name: "AUTH_SECRET", label: "کلیدِ امضای نشست‌های Auth.js", length: 44 }],
     },
     meta: {
       pros: ["متن‌باز و روی سرورِ خودت — دادهٔ کاربر پیشِ خودت می‌ماند", "ده‌ها ارائه‌دهندهٔ آماده", "هزینهٔ ماهانه ندارد"],
