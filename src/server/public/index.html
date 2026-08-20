@@ -388,6 +388,8 @@
       secretsNote: "مقدارِ واقعی فقط در .env می‌رود که کامیت نمی‌شود؛ در .env.example جای‌نگه‌دار می‌نشیند.",
       secretsGo: "نصب با این رمز",
       regenerate: "دوباره بساز",
+      externalKeys: "کلیدهایِ بیرونی",
+      externalKeysLead: "این‌ها ساختنی نیستند و باید از حسابِ خودت برداری و در .env بگذاری:",
       ok: "فهمیدم",
       close: "بستن",
       groupHelp: "توضیحِ این گروه",
@@ -472,6 +474,8 @@
       secretsNote: "The real value only lands in .env, which is not committed; .env.example gets a placeholder.",
       secretsGo: "Install with this",
       regenerate: "Regenerate",
+      externalKeys: "Keys you supply",
+      externalKeysLead: "These cannot be generated. Get them from your own account and put them in .env:",
       ok: "Got it",
       close: "Close",
       groupHelp: "About this group",
@@ -1008,6 +1012,19 @@
         const pre = document.createElement("pre");
         pre.textContent = opt.installs.join("\n");
         body.append(pre);
+      }
+
+      // کلیدهایی که ابزار نمی‌تواند بسازد. بهتر است کاربر **قبل** از نصب
+      // بداند که باید جایی حساب باز کند.
+      if (opt.externals && opt.externals.length) {
+        body.append(el("h4", null, T("externalKeys")));
+        body.append(el("p", "lead", T("externalKeysLead")));
+        for (const ext of opt.externals) {
+          const row = el("div", "secret");
+          row.append(el("div", "secret-name", ext.name));
+          row.append(el("div", null, ext.where));
+          body.append(row);
+        }
       }
 
       if (opt.removal) {

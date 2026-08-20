@@ -1390,6 +1390,8 @@ export const TECHNOLOGIES = [
         { kind: "cli", command: "pnpm --filter ai-service add openai" },
         { kind: "env", vars: { AI_SERVICE_PORT: "8000", OPENAI_API_KEY: "" } },
       ],
+      // ساختنی نیست: از حسابِ خودت در OpenAI می‌آید.
+      externals: [{ name: "OPENAI_API_KEY", where: "platform.openai.com → API keys" }],
     },
     meta: {
       pros: ["یک زبان برای کلِ پروژه — یک محیطِ نصب و یک زنجیرهٔ استقرار", "اشتراکِ کد و نوع با بک‌اند"],
@@ -1422,6 +1424,11 @@ export const TECHNOLOGIES = [
         { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
         { kind: "cli", command: "pnpm --filter web add @clerk/clerk-react" },
         { kind: "env", vars: { VITE_CLERK_PUBLISHABLE_KEY: "", CLERK_SECRET_KEY: "" } },
+      ],
+      // ساختنی نیست: از حسابِ خودت می‌آید.
+      externals: [
+        { name: "VITE_CLERK_PUBLISHABLE_KEY", where: "داشبوردِ Clerk ← API Keys ← Publishable key" },
+        { name: "CLERK_SECRET_KEY", where: "داشبوردِ Clerk ← API Keys ← Secret key" },
       ],
     },
     meta: {
@@ -1473,6 +1480,7 @@ export const TECHNOLOGIES = [
         { kind: "cli", command: "pnpm --filter api add pino @sentry/node" },
         { kind: "env", vars: { LOG_LEVEL: "info", SENTRY_DSN: "" } },
       ],
+      externals: [{ name: "SENTRY_DSN", where: "پروژه در sentry.io → Settings → Client Keys (DSN)" }],
     },
     meta: {
       pros: ["راه‌اندازیِ چنددقیقه‌ای", "خطاها با کدِ دقیق و کاربرِ مربوطه گروه‌بندی می‌شوند", "لاگِ ساخت‌یافتهٔ سریع با pino"],
@@ -1794,6 +1802,13 @@ export const TECHNOLOGIES = [
     apply: {
       verified: true,
       steps: [{ kind: "env", vars: { AWS_S3_BUCKET: "", AWS_REGION: "", AWS_ACCESS_KEY_ID: "", AWS_SECRET_ACCESS_KEY: "" } }],
+      // ساختنی نیست: از حسابِ AWS خودت می‌آید.
+      externals: [
+        { name: "AWS_S3_BUCKET", where: "نامِ باکتی که در AWS ساخته‌ای" },
+        { name: "AWS_REGION", where: "منطقهٔ همان باکت، مثلِ eu-central-1" },
+        { name: "AWS_ACCESS_KEY_ID", where: "AWS IAM ← Users ← Security credentials" },
+        { name: "AWS_SECRET_ACCESS_KEY", where: "همان‌جا، فقط یک‌بار نشان داده می‌شود" },
+      ],
     },
     meta: {
       pros: ["بی‌نهایت مقیاس‌پذیر", "نگه‌داری با خودت نیست", "پایداریِ بالا"],
@@ -2007,6 +2022,70 @@ export const REMOVALS = {
  * همان جایی بیاید که کار از آنجا انجام می‌شود.
  */
 /**
+ * متغیرهایی که کاربر باید خودش از جایی بیاورد — و از کجا.
+ *
+ * فرقش با secrets: این‌ها **ساختنی نیستند**. کلیدِ OpenAI یا DSNِ Sentry را
+ * نمی‌شود تصادفی ساخت؛ باید از حسابِ خودت برداری.
+ */
+export function externalsFor(techId) {
+  const tech = technologyById(techId);
+  return (tech?.apply?.externals || []).map((x) => ({ name: x.name, where: x.where }));
+}
+
+/**
+ * متغیرهای env که هیچ‌کس صاحبشان نیست.
+ *
+ * چرا این تابع وجود دارد: `AUTH_SECRET` مدت‌ها خالی نوشته می‌شد و هیچ‌جا
+ * نمی‌گفت باید ساخته شود. کاربر یک `.env` می‌گرفت با یک خطِ خالی و هیچ
+ * سرنخی. تکیه به یادآوریِ آدم‌ها جواب نداد، پس تست اجبارش می‌کند.
+ *
+ * هر مقدارِ env باید یکی از این سه باشد:
+ * - مقدارِ واقعی (`API_PORT: "4000"`)
+ * - ارجاع به پورت یا رمزی که اعلام شده (`${POSTGRES_PASSWORD}`)
+ * - خالی، ولی در `externals` با نشانیِ گرفتنش
+ */
+export function orphanEnvVars() {
+  const problems = [];
+  for (const tech of TECHNOLOGIES) {
+    const secretNames = new Set((tech.apply?.secrets || []).map((x) => x.name));
+    const externalNames = new Set((tech.apply?.externals || []).map((x) => x.name));
+    const portNames = new Set(
+      (tech.apply?.steps || [])
+        .filter((st) => st.kind === "composeService")
+        .flatMap((st) => (st.ports || []).map((pt) => pt.env)),
+    );
+
+    for (const step of tech.apply?.steps || []) {
+      if (step.kind !== "env") continue;
+      for (const [name, value] of Object.entries(step.vars)) {
+        if (value === "") {
+          if (!externalNames.has(name)) {
+            problems.push(`${tech.id}: ${name} خالی است ولی نه رمز است نه در externals — تصادفی ساخته شود یا بگو از کجا می‌آید`);
+          }
+          continue;
+        }
+        if (typeof value !== "string") continue;
+        for (const ref of value.matchAll(/\$\{([A-Za-z_][A-Za-z0-9_]*)\}/g)) {
+          const target = ref[1];
+          if (!secretNames.has(target) && !portNames.has(target)) {
+            problems.push(`${tech.id}: ${name} به ${target} ارجاع می‌دهد که نه پورت است نه رمزِ اعلام‌شده`);
+          }
+        }
+      }
+    }
+
+    // رمزی که اعلام شده ولی هیچ‌جا استفاده نمی‌شود، یعنی از کاربر بی‌دلیل پرسیده می‌شود.
+    const used = JSON.stringify(tech.apply?.steps || []);
+    for (const name of secretNames) {
+      if (!used.includes("${" + name + "}")) {
+        problems.push(`${tech.id}: رمزِ ${name} اعلام شده ولی هیچ گامی از آن استفاده نمی‌کند`);
+      }
+    }
+  }
+  return problems;
+}
+
+/**
  * رمزهایی که این تکنولوژی لازم دارد.
  *
  * چرا در داده و نه در کد: تا UI بتواند **قبل از نصب** بپرسدشان و همان مقدار
@@ -2045,6 +2124,9 @@ export function describeApply(techId) {
       const ports = (step.ports || []).map((x) => x.container).join("، ");
       out.push(`سرویسِ Docker: ${step.service} (ایمیجِ ${step.image}${ports ? `، پورتِ ${ports}` : ""})`);
     }
+  }
+  for (const ext of tech.apply?.externals || []) {
+    out.push(`کلیدِ بیرونی: ${ext.name} — ${ext.where}`);
   }
   for (const sec of tech.apply?.secrets || []) {
     out.push(sec.fixed

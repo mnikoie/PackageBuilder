@@ -21,7 +21,7 @@ import {
   PRESENT, ABSENT, UNKNOWN,
   detectNpmPackage, detectNodeModules, detectPythonVenv, detectPythonPackage, detectMonorepoTool,
 } from "./detect.mjs";
-import { CATEGORIES, TECHNOLOGIES, secretsFor, describeApply, describeRemoval } from "./registry.mjs";
+import { CATEGORIES, TECHNOLOGIES, secretsFor, externalsFor, describeApply, describeRemoval } from "./registry.mjs";
 import { CATEGORIES_EN, TECH_EN } from "./i18n.mjs";
 
 const present = (evidence) => ({ state: PRESENT, evidence });
@@ -213,6 +213,8 @@ export function resolveRegistry(projectPath, { probe, categories = CATEGORIES, t
           installs: describeApply(t.id),
           // رمزهایی که UI باید قبل از نصب بپرسد.
           secrets: secretsFor(t.id),
+          // کلیدهایی که ساختنی نیستند و باید از بیرون بیایند.
+          externals: externalsFor(t.id),
           removal: describeRemoval(t.id),
           requires: (t.requires || []).map((dep) => byId.get(dep)?.tech.label || dep),
         };

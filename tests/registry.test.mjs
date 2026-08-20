@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import {
   CATEGORIES, TECHNOLOGIES, validateRegistry,
   categoryById, technologyById, technologiesInCategory, unverifiedTechnologies,
+  orphanEnvVars,
 } from "../src/core/registry.mjs";
 import { resolveRegistry, evaluateDetect, resolveRole } from "../src/core/resolve.mjs";
 import { PRESENT, ABSENT, UNKNOWN, detectDockerServices, probeProject } from "../src/core/detect.mjs";
@@ -444,5 +445,35 @@ describe("قرارداد: تقلبی باید شکلِ واقعی را داشت�
     assert.equal(db.uncertain, false, "بی فایلِ compose نباید «نامعلوم» بگوید");
     assert.equal(db.undecided, true);
     assert.deepEqual(out.conflicts, []);
+  });
+});
+
+describe("هیچ متغیرِ env بی‌صاحب نماند", () => {
+  // این تست از یک اشتباهِ واقعی آمد: AUTH_SECRET خالی نوشته می‌شد و هیچ‌جا
+  // نمی‌گفت باید ساخته شود. کاربر `.env`ای می‌گرفت با یک خطِ خالی و بی سرنخ.
+  //
+  // پس هر بار که تکنولوژیِ نویی اضافه می‌شود، همین تست می‌پرسد: این مقدار
+  // ساختنی است (secrets)، یا از بیرون می‌آید (externals)؟ سومی وجود ندارد.
+  test("هر مقدار یا واقعی است، یا رمزِ اعلام‌شده، یا کلیدِ بیرونی", () => {
+    const problems = orphanEnvVars();
+    assert.deepEqual(problems, [], `\n  ${problems.join("\n  ")}\n`);
+  });
+
+  test("کلیدهای بیرونی می‌گویند از کجا باید گرفت", () => {
+    for (const tech of TECHNOLOGIES) {
+      for (const ext of tech.apply?.externals || []) {
+        assert.ok(ext.where && ext.where.length > 8, `${tech.id}: ${ext.name} نشانی ندارد`);
+      }
+    }
+  });
+
+  test("طولِ رمز آن‌قدر هست که حدس‌زدنی نباشد", () => {
+    for (const tech of TECHNOLOGIES) {
+      for (const sec of tech.apply?.secrets || []) {
+        if (sec.fixed) continue;
+        assert.ok((sec.length || 20) >= 16, `${tech.id}: ${sec.name} کوتاه‌تر از ۱۶ کاراکتر`);
+        assert.ok(sec.label && sec.label.length > 5, `${tech.id}: ${sec.name} برچسبِ گویا ندارد`);
+      }
+    }
   });
 });

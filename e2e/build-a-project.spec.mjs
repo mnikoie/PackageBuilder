@@ -273,18 +273,41 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
   });
   expect(running.stdout).toContain("clickedapp-postgres-1");
 
-  // و سرویس باید واقعاً جواب بدهد
-  const ready = spawnSync("docker", ["exec", "clickedapp-postgres-1", "pg_isready", "-U", "app"], {
-    encoding: "utf8", timeout: 30_000,
-  });
-  expect(ready.stdout).toContain("accepting connections");
+  // و سرویس باید واقعاً جواب بدهد.
+  //
+  // چرا حلقه و نه یک پرسشِ ساده: «کانتینر بالاست» با «Postgres آماده است» یکی
+  // نیست. ایمیج اولِ کار دیتابیس را می‌سازد و در آن چند ثانیه
+  // `pg_isready` جواب می‌دهد «no response». این همان چیزی بود که این تست را
+  // گاهی قرمز می‌کرد — نوسانی نبود، فقط زود می‌پرسید.
+  const waitFor = (fn, what) => {
+    for (let i = 0; i < 40; i++) {
+      const r = fn();
+      if (r.ok) return r.value;
+      // خوابِ بی‌وابستگی: از خودِ داکر، تا روی هر سیستمی یکسان باشد.
+      spawnSync("docker", ["run", "--rm", "postgres:17-alpine", "sleep", "1"]);
+    }
+    throw new Error(`${what} در ۴۰ تلاش آماده نشد`);
+  };
+
+  waitFor(() => {
+    const r = spawnSync("docker", ["exec", "clickedapp-postgres-1", "pg_isready", "-U", "app"],
+      { encoding: "utf8", timeout: 30_000 });
+    return { ok: (r.stdout || "").includes("accepting connections"), value: r.stdout };
+  }, "Postgres");
 
   // رمزی که در پنجره دیدیم باید همانی باشد که سرویس واقعاً قبول می‌کند —
   // وگرنه «نصب شد»ِ صفحه ادعای بی‌مدرک است.
-  const auth = spawnSync("docker", [
-    "exec", "-e", `PGPASSWORD=${password}`, "clickedapp-postgres-1",
-    "psql", "-h", "127.0.0.1", "-U", "app", "-d", "app", "-c", "select 1;",
-  ], { encoding: "utf8", timeout: 30_000 });
+  const auth = waitFor(() => {
+    const r = spawnSync("docker", [
+      "exec", "-e", `PGPASSWORD=${password}`, "clickedapp-postgres-1",
+      "psql", "-h", "127.0.0.1", "-U", "app", "-d", "app", "-c", "select 1;",
+    ], { encoding: "utf8", timeout: 30_000 });
+    // رمزِ غلط را دوباره امتحان نمی‌کنیم: آن شکستِ واقعی است، نه نبودنِ آمادگی.
+    if ((r.stderr || "").includes("password authentication failed")) {
+      throw new Error(`رمزی که در پنجره دیدیم قبول نشد: ${r.stderr}`);
+    }
+    return { ok: r.status === 0, value: r };
+  }, "اتصال با رمز");
   expect(auth.status, auth.stderr).toBe(0);
 
   // و در .env نشسته باشد، ولی در .env.example هرگز — آن فایل کامیت می‌شود.
