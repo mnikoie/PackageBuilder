@@ -105,6 +105,29 @@ FATAL: password authentication failed for user "app"
 
 مسیرِ پروژهٔ نو، یا پروژه‌ای که داده‌اش برایت مهم نیست.
 
+> ### ⚠️ `--env-file .env` را هرگز جا نینداز
+>
+> در همهٔ فرمان‌های این سند این تکه هست. حذفش خطای گمراه‌کننده می‌دهد.
+>
+> **چرا:** فایلِ compose پورت‌ها را این‌طور می‌نویسد:
+>
+> ```yaml
+> ports:
+>   - "${REDIS_PORT:-6379}:6379"
+> ```
+>
+> و `docker compose` متغیرها را از پوشهٔ **فایلِ compose** می‌خواند، یعنی
+> `deployment/`. آنجا `.env` نیست — `.env` در ریشهٔ پروژه است. پس بدونِ
+> `--env-file`، همهٔ متغیرها به پیش‌فرضِ بعدِ `:-` می‌افتند: `6379`, `5432`,
+> `7700`, `9000`. یعنی همان پورت‌های استاندارد که احتمالاً پروژهٔ دیگری
+> گرفته‌شان، و می‌بینی:
+>
+> ```
+> Error response from daemon: Bind for 0.0.0.0:6379 failed: port is already allocated
+> ```
+>
+> این خطا **ربطی به رمز و کانفیگ ندارد** — فقط یعنی `.env` خوانده نشده.
+
 ### ۱. `.env` را بساز
 
 ```bash
@@ -122,7 +145,7 @@ copy .env.example .env
 ### ۴. اگر قبلاً بالا آورده بودی، volume را دور بریز
 
 ```bash
-docker compose -f deployment/docker-compose.yml down -v
+docker compose --env-file .env -f deployment/docker-compose.yml down -v
 ```
 
 اینجا `-v` عمدی است — دادهٔ قدیمی می‌رود تا رمزِ جدید هنگامِ ساختِ اولیه اعمال شود.
@@ -131,19 +154,19 @@ docker compose -f deployment/docker-compose.yml down -v
 ### ۵. بالا بیاور
 
 ```bash
-docker compose -f deployment/docker-compose.yml up -d
+docker compose --env-file .env -f deployment/docker-compose.yml up -d
 ```
 
 ### ۶. بررسی کن
 
 ```bash
-docker compose -f deployment/docker-compose.yml ps
+docker compose --env-file .env -f deployment/docker-compose.yml ps
 ```
 
 هر سرویس باید `running` باشد. اگر یکی `restarting` بود، لاگش را ببین:
 
 ```bash
-docker compose -f deployment/docker-compose.yml logs postgres
+docker compose --env-file .env -f deployment/docker-compose.yml logs postgres
 ```
 
 ---
@@ -246,13 +269,13 @@ app → Databases → app → Schemas → public → Tables
 ### ۱. اول پشتیبان بگیر
 
 ```bash
-docker compose -f deployment/docker-compose.yml exec postgres pg_dump -U app app > backup.sql
+docker compose --env-file .env -f deployment/docker-compose.yml exec postgres pg_dump -U app app > backup.sql
 ```
 
 ### ۲. رمز را عوض کن
 
 ```bash
-docker compose -f deployment/docker-compose.yml exec postgres psql -U app -d app -c "ALTER USER app WITH PASSWORD 'رمز-جدید';"
+docker compose --env-file .env -f deployment/docker-compose.yml exec postgres psql -U app -d app -c "ALTER USER app WITH PASSWORD 'رمز-جدید';"
 ```
 
 ### ۳. `.env` و `docker-compose.yml` را با همان رمز به‌روز کن
@@ -262,7 +285,7 @@ docker compose -f deployment/docker-compose.yml exec postgres psql -U app -d app
 ### ۴. کانتینر را دوباره بساز
 
 ```bash
-docker compose -f deployment/docker-compose.yml up -d --force-recreate
+docker compose --env-file .env -f deployment/docker-compose.yml up -d --force-recreate
 ```
 
 `-v` نزدی، پس volume سرِ جایش است و داده نرفته.
@@ -274,7 +297,7 @@ docker compose -f deployment/docker-compose.yml up -d --force-recreate
 ### گرفتن
 
 ```bash
-docker compose -f deployment/docker-compose.yml exec postgres pg_dump -U app app > backup.sql
+docker compose --env-file .env -f deployment/docker-compose.yml exec postgres pg_dump -U app app > backup.sql
 ```
 
 ### فهمیدنِ اینکه اصلاً داده‌ای داری یا نه
@@ -302,7 +325,7 @@ SET statement_timeout = 0;
 ### برگرداندن
 
 ```bash
-docker compose -f deployment/docker-compose.yml exec -T postgres psql -U app -d app < backup.sql
+docker compose --env-file .env -f deployment/docker-compose.yml exec -T postgres psql -U app -d app < backup.sql
 ```
 
 آن `-T` لازم است: بدونش داکر یک TTY می‌سازد و ورودیِ فایل به فرمان نمی‌رسد.
@@ -316,32 +339,32 @@ docker compose -f deployment/docker-compose.yml exec -T postgres psql -U app -d 
 **وضعیت**
 
 ```bash
-docker compose -f deployment/docker-compose.yml ps
+docker compose --env-file .env -f deployment/docker-compose.yml ps
 ```
 
 **لاگِ زنده**
 
 ```bash
-docker compose -f deployment/docker-compose.yml logs -f postgres
+docker compose --env-file .env -f deployment/docker-compose.yml logs -f postgres
 ```
 
 **خواباندن بدونِ حذفِ داده** — برای وقتی که روی پروژه کار نمی‌کنی و نمی‌خواهی رم
 مصرف شود. با `up -d` برمی‌گردد.
 
 ```bash
-docker compose -f deployment/docker-compose.yml stop
+docker compose --env-file .env -f deployment/docker-compose.yml stop
 ```
 
 **بالا آوردن**
 
 ```bash
-docker compose -f deployment/docker-compose.yml up -d
+docker compose --env-file .env -f deployment/docker-compose.yml up -d
 ```
 
 **خطِ فرمانِ دیتابیس**
 
 ```bash
-docker compose -f deployment/docker-compose.yml exec postgres psql -U app -d app
+docker compose --env-file .env -f deployment/docker-compose.yml exec postgres psql -U app -d app
 ```
 
 **دیدنِ همهٔ کانتینرهای سیستم**
@@ -353,7 +376,7 @@ docker ps --format "table {{.Names}}\t{{.Image}}\t{{.Ports}}\t{{.Status}}"
 ### ⚠️ تنها فرمانی که داده را نابود می‌کند
 
 ```bash
-docker compose -f deployment/docker-compose.yml down -v
+docker compose --env-file .env -f deployment/docker-compose.yml down -v
 ```
 
 آن `-v` است که volume را پاک می‌کند. `down` بدونِ `-v` فقط کانتینرها را برمی‌دارد
@@ -384,10 +407,14 @@ docker exec -e PGPASSWORD=رمزت نام-کانتینر psql -h 127.0.0.1 -U ap
 ### پورت اشغال است
 
 ```
-Error: port is already allocated
+Error response from daemon: Bind for 0.0.0.0:6379 failed: port is already allocated
 ```
 
-ببین چه چیزی رویش است:
+**اول از همه:** ببین `--env-file .env` را در فرمان گذاشته‌ای یا نه. اگر پورتی که
+در خطا آمده یک عددِ **استاندارد** است (`6379`, `5432`, `7700`, `9000`) ولی در
+`.env` عددِ دیگری نوشته‌ای، علتش همین است و نه چیزِ دیگر. → بخش ۳، کادرِ هشدار.
+
+اگر واقعاً پورتِ خودت اشغال است، ببین چه چیزی رویش نشسته:
 
 ```bash
 docker ps --format "{{.Names}}\t{{.Ports}}"
@@ -399,7 +426,7 @@ docker ps --format "{{.Names}}\t{{.Ports}}"
 ### کانتینر مدام `restarting` است
 
 ```bash
-docker compose -f deployment/docker-compose.yml logs نام-سرویس
+docker compose --env-file .env -f deployment/docker-compose.yml logs نام-سرویس
 ```
 
 شایع‌ترین علت‌ها: `POSTGRES_PASSWORD` خالی است، یا `MINIO_ROOT_PASSWORD` کمتر از
@@ -421,3 +448,4 @@ docker compose -f deployment/docker-compose.yml logs نام-سرویس
 | رمز عوض شد، داده دارم | `pg_dump` ← `ALTER USER` ← فایل‌ها ← `up -d --force-recreate` |
 | خطای authentication | اول از داخلِ کانتینر تست کن، بعد سراغِ کلاینت برو |
 | کارم تمام شد | `stop` — نه `down -v` |
+| هر فرمانِ docker compose | `--env-file .env` را جا نینداز |
