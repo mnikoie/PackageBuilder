@@ -74,6 +74,65 @@ const TURBO_JSON = JSON.stringify(
   2,
 ) + "\n";
 
+/**
+ * کانفیگِ Playwright.
+ *
+ * testDir روی tests/e2e است، نه ریشه: تست‌های واحد داخلِ خودِ هر app می‌مانند
+ * و این پوشه فقط مالِ تستِ سرتاسری است.
+ */
+const PLAYWRIGHT_CONFIG = [
+  'import { defineConfig, devices } from "@playwright/test";',
+  "",
+  "export default defineConfig({",
+  '  testDir: "tests/e2e",',
+  "  timeout: 60_000,",
+  "  expect: { timeout: 10_000 },",
+  "  retries: 0,",
+  '  reporter: [["list"]],',
+  "  use: {",
+  '    ...devices["Desktop Chrome"],',
+  '    baseURL: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000",',
+  '    locale: "fa-IR",',
+  '    screenshot: "only-on-failure",',
+  "  },",
+  "});",
+  "",
+].join("\n");
+
+const PLAYWRIGHT_EXAMPLE = [
+  'import { test, expect } from "@playwright/test";',
+  "",
+  "// تستِ نمونه — بی نیاز به سرورِ در حالِ اجرا، تا از همان اول سبز باشد.",
+  "// تستِ واقعیِ خودت را کنارش بنویس و baseURL را در E2E_BASE_URL بگذار.",
+  'test("محیطِ تست آماده است", async () => {',
+  "  expect(1 + 1).toBe(2);",
+  "});",
+  "",
+].join("\n");
+
+const CYPRESS_CONFIG = [
+  'import { defineConfig } from "cypress";',
+  "",
+  "export default defineConfig({",
+  "  e2e: {",
+  '    baseUrl: process.env.E2E_BASE_URL ?? "http://127.0.0.1:3000",',
+  '    specPattern: "tests/e2e/**/*.cy.{js,ts}",',
+  '    supportFile: false,',
+  "  },",
+  "});",
+  "",
+].join("\n");
+
+const CYPRESS_EXAMPLE = [
+  "// تستِ نمونه. تستِ واقعیِ خودت را کنارش بنویس.",
+  'describe("محیطِ تست", () => {',
+  '  it("آماده است", () => {',
+  "    expect(1 + 1).to.equal(2);",
+  "  });",
+  "});",
+  "",
+].join("\n");
+
 const NX_JSON = JSON.stringify({ $schema: "./node_modules/nx/schemas/nx-schema.json" }, null, 2) + "\n";
 
 const REQUIREMENTS_TXT = [
@@ -1728,6 +1787,10 @@ export const TECHNOLOGIES = [
       steps: [
         { kind: "pnpmAddDev", packages: ["@playwright/test"] },
         { kind: "cli", command: "pnpm exec playwright install chromium" },
+        // بی کانفیگ و بی تست، نصب یعنی ابزاری که چیزی برای اجرا ندارد.
+        { kind: "mkdir", path: "tests/e2e" },
+        { kind: "writeFile", path: "playwright.config.ts", content: PLAYWRIGHT_CONFIG },
+        { kind: "writeFile", path: "tests/e2e/example.spec.ts", content: PLAYWRIGHT_EXAMPLE },
       ],
     },
     meta: {
@@ -1741,7 +1804,15 @@ export const TECHNOLOGIES = [
     label: "Cypress",
     requires: ["pnpm"],
     detect: { kind: "npmRoot", name: "cypress" },
-    apply: { verified: true, steps: [{ kind: "pnpmAddDev", packages: ["cypress"], allowBuild: ["cypress"] }] },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmAddDev", packages: ["cypress"], allowBuild: ["cypress"] },
+        { kind: "mkdir", path: "tests/e2e" },
+        { kind: "writeFile", path: "cypress.config.ts", content: CYPRESS_CONFIG },
+        { kind: "writeFile", path: "tests/e2e/example.cy.ts", content: CYPRESS_EXAMPLE },
+      ],
+    },
     meta: {
       pros: ["رابطِ کاربریِ خوب برای دیدنِ تست", "جامعهٔ بزرگ"],
       cons: ["عمدتاً Chromium", "کندتر", "تستِ چند-تب و چند-دامنه ضعیف"],
@@ -1886,8 +1957,20 @@ export const REMOVALS = {
     ],
   },
 
-  playwright: { steps: [{ kind: "cli", command: "pnpm remove -D @playwright/test" }] },
-  cypress: { steps: [{ kind: "cli", command: "pnpm remove -D cypress" }] },
+  playwright: {
+    steps: [
+      { kind: "cli", command: "pnpm remove -D @playwright/test" },
+      { kind: "deleteFile", path: "playwright.config.ts" },
+    ],
+    manual: "پوشهٔ tests/ دست‌نخورده می‌ماند — تست‌هایی که خودت نوشته‌ای آنجا هستند.",
+  },
+  cypress: {
+    steps: [
+      { kind: "cli", command: "pnpm remove -D cypress" },
+      { kind: "deleteFile", path: "cypress.config.ts" },
+    ],
+    manual: "پوشهٔ tests/ دست‌نخورده می‌ماند — تست‌هایی که خودت نوشته‌ای آنجا هستند.",
+  },
 };
 
 /**
