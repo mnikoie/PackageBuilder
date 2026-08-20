@@ -76,7 +76,7 @@ node src/cli.mjs revert ./my-app --tech postgres
 
 ## چه چیزهایی می‌توانی انتخاب کنی
 
-۱۵ دسته و ۳۷ تکنولوژی. هر کدام یک‌بار واقعاً روی پوشهٔ خالی نصب شده و با مدرکِ واقعی سنجیده شده — نه اینکه فرض شود کار می‌کند.
+۲۰ دسته و ۴۴ تکنولوژی. هر کدام یک‌بار واقعاً روی پوشهٔ خالی نصب شده و با مدرکِ واقعی سنجیده شده — نه اینکه فرض شود کار می‌کند.
 
 | دسته | گزینه‌ها |
 |---|---|
@@ -84,6 +84,11 @@ node src/cli.mjs revert ./my-app --tech postgres
 | مدیرِ پکیج | pnpm · npm |
 | ساختارِ مخزن | Turborepo · Nx · فقط pnpm workspaces |
 | فرانت | React Router v7 · Next.js · Vite + React |
+| کیتِ رابطِ کاربری | shadcn/ui + Lucide |
+| دادهٔ سمتِ کلاینت | TanStack Query · SWR |
+| استیتِ سراسری | Zustand · Redux Toolkit |
+| تاریخِ شمسی | react-multi-date-picker |
+| پکیج‌های مشترک | packages/ui، shared-types، api-client، config |
 | استایل | Tailwind CSS · Bootstrap |
 | بک‌اند | NestJS · Express · Fastify |
 | سبکِ API | REST + OpenAPI · tRPC · GraphQL |
@@ -117,7 +122,7 @@ src/
   core/
     scaffold.mjs     ساختِ اسکلتِ مستقل از تکنولوژی
     detect.mjs       تشخیصِ سه‌حالتی، فقط‌خواندنی
-    registry.mjs     ۱۵ دسته و ۳۷ تکنولوژی — داده، نه کد
+    registry.mjs     ۲۰ دسته و ۴۴ تکنولوژی — داده، نه کد
     resolve.mjs      سنجشِ مدرک‌ها روی پروژهٔ واقعی
     apply.mjs        اعمال و برگشتِ تصمیم‌ها
   server/

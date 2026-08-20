@@ -115,6 +115,8 @@ describe("سلامتِ رجیستری", () => {
       // هر ۲۸ مورد واقعاً از پوشهٔ خالی تا مدرکِ کارکردن اجرا شد.
       "node", "python", "pnpm", "npm", "turborepo", "nx", "pnpm-workspaces",
       "react-router-v7", "nextjs", "vite-react", "tailwind", "bootstrap",
+      "shadcn-ui", "tanstack-query", "swr", "zustand", "redux-toolkit",
+      "persian-datepicker", "workspace-packages",
       "nestjs", "express", "fastify", "bullmq",
       "fastapi", "node-ai-service",
       "clerk", "authjs", "sentry-pino", "grafana-stack", "celery",

@@ -77,7 +77,7 @@ On Windows, `start-server.bat` and `stop-server.bat` are there for convenience.
 
 ## What you can choose
 
-15 categories, 37 technologies. Every one of them has been installed for real on an empty folder and verified with actual evidence — not assumed to work.
+20 categories, 44 technologies. Every one of them has been installed for real on an empty folder and verified with actual evidence — not assumed to work.
 
 | Category | Options |
 |---|---|
@@ -85,6 +85,11 @@ On Windows, `start-server.bat` and `stop-server.bat` are there for convenience.
 | Package manager | pnpm · npm |
 | Repository structure | Turborepo · Nx · plain pnpm workspaces |
 | Frontend | React Router v7 · Next.js · Vite + React |
+| UI kit | shadcn/ui + Lucide |
+| Client data | TanStack Query · SWR |
+| Global state | Zustand · Redux Toolkit |
+| Persian dates | react-multi-date-picker |
+| Shared packages | packages/ui, shared-types, api-client, config |
 | Styling | Tailwind CSS · Bootstrap |
 | Backend | NestJS · Express · Fastify |
 | API style | REST + OpenAPI · tRPC · GraphQL |
@@ -118,7 +123,7 @@ src/
   core/
     scaffold.mjs     creates the technology-neutral skeleton
     detect.mjs       three-state detection, read-only
-    registry.mjs     the 15 categories and 37 technologies — data, not code
+    registry.mjs     the 20 categories and 44 technologies — data, not code
     resolve.mjs      evaluates evidence against a real project
     apply.mjs        applying and reverting decisions
   server/

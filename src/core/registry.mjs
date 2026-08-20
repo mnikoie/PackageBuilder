@@ -407,6 +407,28 @@ const BOOTSTRAP_CSS = [
   "",
 ].join("\n");
 
+/** package.jsonِ یک پکیجِ مشترک — نه اجراشدنی، فقط برای import شدن. */
+const sharedPkg = (name, description) =>
+  JSON.stringify(
+    {
+      name: `@workspace/${name}`,
+      version: "0.0.0",
+      private: true,
+      description,
+      main: "src/index.ts",
+      types: "src/index.ts",
+    },
+    null,
+    2,
+  ) + "\n";
+
+const SHARED_PACKAGES = [
+  { dir: "ui", desc: "کامپوننت‌های مشترکِ رابطِ کاربری", index: "// کامپوننت‌های مشترک را اینجا export کن.\nexport {};\n" },
+  { dir: "shared-types", desc: "تایپ‌های مشترکِ بینِ فرانت و بک‌اند", index: "// تایپ‌هایی که هر دو طرف لازمشان دارند.\nexport {};\n" },
+  { dir: "api-client", desc: "کلاینتِ API — از روی سندِ OpenAPI تولید می‌شود", index: "// کلاینتِ تولیدشده اینجا می‌نشیند.\nexport {};\n" },
+  { dir: "config", desc: "تنظیماتِ مشترک (eslint، tsconfig، ...)", index: "// تنظیماتِ مشترک.\nexport {};\n" },
+];
+
 const WORKER_APP = minimalApp("worker", "src/main.js", [
   'import { Worker } from "bullmq";',
   "",
@@ -480,6 +502,75 @@ export const CATEGORIES = [
       "اجرا می‌شود — سبک‌تر و ساده‌تر، ولی SEO را خودت باید حل کنی.",
       "نکته: قالبِ رسمیِ Next.js و React Router خودشان Tailwind می‌آورند.",
     ].join(" "),
+  },
+  {
+    id: "uiKit",
+    label: "کیتِ رابطِ کاربری",
+    question: "دکمه و فرم و مودال از کجا بیایند؟",
+    description: [
+      "نوشتنِ هر دکمه و فرم و مودال از صفر وقت می‌برد و نتیجه‌اش هم یکدست",
+      "نمی‌شود. کیتِ رابطِ کاربری این‌ها را آماده می‌دهد.",
+      "shadcn/ui با بقیه فرق دارد: کتابخانه‌ای نیست که import کنی، بلکه کدِ",
+      "کامپوننت را داخلِ پروژه‌ات کپی می‌کند. یعنی مالکِ کد خودتی و هر جایش را",
+      "خواستی عوض می‌کنی، بی اینکه با پیش‌فرض‌های یک کتابخانه بجنگی.",
+      "Lucide هم مجموعهٔ آیکونش است.",
+    ].join(" "),
+    requiresCategory: "styling",
+  },
+  {
+    id: "dataFetching",
+    label: "دادهٔ سمتِ کلاینت",
+    question: "گرفتنِ داده از سرور چطور مدیریت شود؟",
+    description: [
+      "هر صفحه‌ای که از سرور داده می‌گیرد باید چند چیز را خودش حل کند: حالتِ",
+      "در حالِ بارگذاری، خطا، تلاشِ دوباره، کشِ نتیجه، و تازه‌سازی بعد از تغییر.",
+      "نوشتنِ دستیِ این‌ها با useEffect زود به کدِ تکراری و باگ‌خیز تبدیل می‌شود.",
+      "TanStack Query همهٔ این‌ها را می‌دهد و خودش می‌فهمد کِی داده کهنه شده.",
+      "SWR سبک‌تر و ساده‌تر است ولی امکاناتِ کمتری دارد.",
+    ].join(" "),
+    requiresCategory: "frontendFramework",
+  },
+  {
+    id: "stateManagement",
+    label: "استیتِ سراسری",
+    question: "داده‌ای که چند صفحه لازمش دارند کجا بماند؟",
+    description: [
+      "چیزهایی مثلِ کاربرِ واردشده، تمِ روشن/تاریک، یا سبدِ خرید را چند بخشِ",
+      "مختلفِ برنامه لازم دارند. رد کردنشان از میانِ کامپوننت‌ها به‌سرعت شلوغ",
+      "می‌شود.",
+      "Zustand کوچک و ساده است: یک تابع می‌نویسی و تمام.",
+      "Redux Toolkit ساختارِ سخت‌گیرتری دارد که برای تیمِ بزرگ و تاریخچهٔ",
+      "تغییرات مفید است ولی کدِ بیشتری می‌خواهد.",
+      "توجه: این با «دادهٔ سمتِ کلاینت» فرق دارد — آن یکی مالِ دادهٔ سرور است.",
+    ].join(" "),
+    requiresCategory: "frontendFramework",
+  },
+  {
+    id: "persianDate",
+    label: "تاریخِ شمسی",
+    question: "تاریخِ جلالی چطور نمایش و انتخاب شود؟",
+    description: [
+      "جاوااسکریپت تاریخِ شمسی را نمی‌شناسد. برای انتخابگرِ تاریخ و نمایشِ",
+      "درستِ تاریخ در فرم‌ها به کتابخانه نیاز داری.",
+      "react-multi-date-picker تقویمِ جلالی و راست‌به‌چپ را با هم دارد.",
+      "خودِ راست‌به‌چپ‌بودنِ صفحه کتابخانه نمی‌خواهد: با dir=\"rtl\" و کلاس‌های",
+      "Tailwind حل می‌شود.",
+    ].join(" "),
+    requiresCategory: "frontendFramework",
+  },
+  {
+    id: "sharedPackages",
+    label: "پکیج‌های مشترک",
+    question: "کدی که بینِ چند app مشترک است کجا بماند؟",
+    description: [
+      "وقتی هم سایت داری هم API، چیزهایی بینشان مشترک می‌شود: تایپ‌ها،",
+      "کامپوننت‌ها، کلاینتِ API، و تنظیمات. کپی‌کردنشان یعنی روزی که یکی عوض",
+      "شود، بقیه از آن عقب می‌مانند.",
+      "این گزینه پوشهٔ packages/ را با چهار پکیجِ آمادهٔ workspace می‌سازد:",
+      "ui برای کامپوننت‌های مشترک، shared-types برای تایپ‌ها، api-client برای",
+      "کلاینتِ تولیدشده از OpenAPI، و config برای تنظیماتِ مشترک.",
+    ].join(" "),
+    requiresCategory: "monorepoTool",
   },
   {
     id: "backendFramework",
@@ -1347,6 +1438,134 @@ export const TECHNOLOGIES = [
     },
   },
 
+  // ------------------------------------------------- کیتِ رابطِ کاربری
+  {
+    id: "shadcn-ui",
+    category: "uiKit",
+    label: "shadcn/ui + Lucide",
+    requires: ["pnpm"],
+    // مدرک: کدِ کامپوننت‌ها داخلِ پروژه کپی می‌شود، پس نصبِ بسته تنها کافی
+    // نیست. lucide-react همان بسته‌ای است که آیکون‌ها از آن می‌آیند.
+    detect: { kind: "npm", role: "web", name: "lucide-react" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "cli", command: "pnpm --filter web exec npx --yes shadcn@latest init -d -y" },
+        { kind: "cli", command: "pnpm --filter web add lucide-react" },
+      ],
+    },
+    meta: {
+      pros: ["کدِ کامپوننت مالِ خودت می‌شود — هرجایش را خواستی عوض کن", "با Tailwind یکی است، نه یک لایهٔ اضافه", "فقط همان چیزی که لازم داری اضافه می‌شود"],
+      cons: ["کد داخلِ پروژه‌ات می‌ماند، پس به‌روزرسانی‌اش با خودت است", "به Tailwind وابسته است"],
+    },
+  },
+
+  // ------------------------------------------------- دادهٔ سمتِ کلاینت
+  {
+    id: "tanstack-query",
+    category: "dataFetching",
+    label: "TanStack Query",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "web", name: "@tanstack/react-query" },
+    apply: {
+      verified: true,
+      steps: [{ kind: "cli", command: "pnpm --filter web add @tanstack/react-query" }],
+    },
+    meta: {
+      pros: ["بارگذاری و خطا و تلاشِ دوباره را خودش مدیریت می‌کند", "کشِ هوشمند — دادهٔ کهنه را خودش تازه می‌کند", "ابزارِ عیب‌یابیِ خوب"],
+      cons: ["برای یکی دو درخواستِ ساده زیادی است", "مفهومش (کش و کلید) اول کمی گیج‌کننده است"],
+    },
+  },
+  {
+    id: "swr",
+    category: "dataFetching",
+    label: "SWR",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "web", name: "swr" },
+    apply: {
+      verified: true,
+      steps: [{ kind: "cli", command: "pnpm --filter web add swr" }],
+    },
+    meta: {
+      pros: ["کوچک و ساده", "یادگیری‌اش چند دقیقه است", "از سازندگانِ Next.js"],
+      cons: ["امکاناتش از TanStack Query کمتر است", "برای کارِ پیچیده‌تر کم می‌آورد"],
+    },
+  },
+
+  // ---------------------------------------------------- استیتِ سراسری
+  {
+    id: "zustand",
+    category: "stateManagement",
+    label: "Zustand",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "web", name: "zustand" },
+    apply: {
+      verified: true,
+      steps: [{ kind: "cli", command: "pnpm --filter web add zustand" }],
+    },
+    meta: {
+      pros: ["خیلی کم‌حجم و ساده", "بی boilerplate — یک تابع و تمام", "با React Server Components هم کنار می‌آید"],
+      cons: ["برای پروژهٔ خیلی بزرگ ساختارِ سخت‌گیرانه‌ای تحمیل نمی‌کند", "ابزارِ عیب‌یابی‌اش از Redux ضعیف‌تر است"],
+    },
+  },
+  {
+    id: "redux-toolkit",
+    category: "stateManagement",
+    label: "Redux Toolkit",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "web", name: "@reduxjs/toolkit" },
+    apply: {
+      verified: true,
+      steps: [{ kind: "cli", command: "pnpm --filter web add @reduxjs/toolkit react-redux" }],
+    },
+    meta: {
+      pros: ["ساختارِ مشخص و یکدست برای تیم", "ابزارِ عیب‌یابیِ عالی (تاریخچهٔ تغییرات)", "اکوسیستمِ بزرگ"],
+      cons: ["کدِ بیشتری می‌خواهد", "برای پروژهٔ کوچک زیادی است"],
+    },
+  },
+
+  // ------------------------------------------------------ تاریخِ شمسی
+  {
+    id: "persian-datepicker",
+    category: "persianDate",
+    label: "react-multi-date-picker (جلالی)",
+    requires: ["pnpm"],
+    detect: { kind: "npm", role: "web", name: "react-multi-date-picker" },
+    apply: {
+      verified: true,
+      steps: [{ kind: "cli", command: "pnpm --filter web add react-multi-date-picker" }],
+    },
+    meta: {
+      pros: ["تقویمِ جلالی و راست‌به‌چپ آماده", "انتخابِ بازه و چند تاریخ", "قابلِ سفارشی‌سازی"],
+      cons: ["برای فقط نمایشِ تاریخ، سنگین است", "مستنداتش انگلیسی است"],
+    },
+  },
+
+  // -------------------------------------------------- پکیج‌های مشترک
+  {
+    id: "workspace-packages",
+    category: "sharedPackages",
+    label: "packages/ — ui، تایپ‌ها، کلاینتِ API، تنظیمات",
+    requires: ["pnpm"],
+    detect: { kind: "file", path: "packages/shared-types/package.json" },
+    apply: {
+      verified: true,
+      steps: [
+        { kind: "pnpmWorkspace", content: WORKSPACE_YAML },
+        ...SHARED_PACKAGES.flatMap((pkg) => [
+          { kind: "mkdir", path: `packages/${pkg.dir}/src` },
+          { kind: "writeFile", path: `packages/${pkg.dir}/package.json`, content: sharedPkg(pkg.dir, pkg.desc) },
+          { kind: "writeFile", path: `packages/${pkg.dir}/src/index.ts`, content: pkg.index },
+        ]),
+        { kind: "cli", command: "pnpm install" },
+      ],
+    },
+    meta: {
+      pros: ["کدِ مشترک یک‌جا می‌ماند و از هم عقب نمی‌افتد", "تایپِ مشترک یعنی خطای ناسازگاری همان موقعِ نوشتن معلوم می‌شود", "هر app با نامِ پکیج importش می‌کند، نه با مسیرِ نسبیِ طولانی"],
+      cons: ["برای پروژهٔ تک‌اپی بی‌فایده است", "یک لایهٔ ساختاری بیشتر"],
+    },
+  },
+
   // ----------------------------------------------------------- سبکِ API
   {
     id: "rest-openapi",
@@ -1599,6 +1818,19 @@ export const REMOVALS = {
     ],
     manual: "پوشهٔ apps/worker-py و محیطِ مجازی‌اش می‌ماند — کدِ کارگرت آنجاست. خودت تصمیم بگیر.",
   },
+  "shadcn-ui": {
+    steps: [{ kind: "cli", command: "pnpm --filter web remove lucide-react" }],
+    manual: "کامپوننت‌هایی که shadcn داخلِ پروژه کپی کرده (components/ui و lib/utils) کدِ خودت‌اند و دست‌نخورده می‌مانند.",
+  },
+  "tanstack-query": { steps: [{ kind: "cli", command: "pnpm --filter web remove @tanstack/react-query" }] },
+  swr: { steps: [{ kind: "cli", command: "pnpm --filter web remove swr" }] },
+  zustand: { steps: [{ kind: "cli", command: "pnpm --filter web remove zustand" }] },
+  "redux-toolkit": { steps: [{ kind: "cli", command: "pnpm --filter web remove @reduxjs/toolkit react-redux" }] },
+  "persian-datepicker": { steps: [{ kind: "cli", command: "pnpm --filter web remove react-multi-date-picker" }] },
+  "workspace-packages": {
+    manual: "پوشهٔ packages/ کدِ مشترکِ توست — خودت تصمیم بگیر و خودت پاکش کن.",
+  },
+
   tailwind: {
     steps: [{ kind: "cli", command: "pnpm --filter web remove tailwindcss @tailwindcss/cli" }],
     // فقط چیزی که خودمان نصب کرده‌ایم برداشته می‌شود. اگر قالبِ Next.js
