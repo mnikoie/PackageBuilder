@@ -208,6 +208,33 @@ test("چیزی که نصب است، نشانِ دیدنی دارد — نه فق
   await expect(node).toHaveClass(/installed/);
 });
 
+/**
+ * رد شدن از پنجرهٔ رمز و برگرداندنِ مقداری که واقعاً فرستاده شد.
+ *
+ * مقدار را از خودِ input می‌خوانیم، نه از حدس: بعداً با همین باید به دیتابیس
+ * وصل شویم، و اگر چیزِ دیگری بنویسیم تست دیگر چیزی را ثابت نمی‌کند.
+ */
+async function passSecretModal(page, name) {
+  const box = page.locator(".modal");
+  await expect(box).toBeVisible({ timeout: 15_000 });
+  await expect(box.locator(".secret-name", { hasText: name })).toBeVisible();
+
+  const input = box.locator(".secret-line input").first();
+  const generated = await input.inputValue();
+  expect(generated.length).toBeGreaterThan(15);
+  // پیش‌فرض باید ساختارِ URL را نشکند، وگرنه DATABASE_URL خراب می‌شود.
+  expect(generated).not.toMatch(/[@:/]/);
+
+  // «دوباره بساز» باید واقعاً مقدارِ دیگری بدهد.
+  await box.getByRole("button", { name: "دوباره بساز" }).click();
+  const second = await input.inputValue();
+  expect(second).not.toBe(generated);
+
+  await box.getByRole("button", { name: "نصب با این رمز" }).click();
+  await expect(box).toBeHidden({ timeout: 10_000 });
+  return second;
+}
+
 test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → برداشتن با کلیک", async ({ page }) => {
   // پیامِ موفقیت دیگر alert نیست — توستی است که خودش بعد از چند ثانیه می‌رود.
   // پس به‌جای انتظارِ لحظه‌ای (که مسابقه‌ای است)، از همان اول ضبطشان می‌کنیم.
@@ -233,6 +260,9 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
   await expect(pg.locator(".chip.no")).toBeVisible();
   await pg.getByRole("button", { name: "نصب کن" }).click();
 
+  // رمز قبل از نصب پرسیده می‌شود.
+  const password = await passSecretModal(page, "POSTGRES_PASSWORD");
+
   await expect(db.locator(".verdict-pill.chosen")).toContainText("PostgreSQL", { timeout: 90_000 });
   await expect(pg.locator(".chip.ok")).toBeVisible();
   expect(await toastsSoFar()).toContain("نصب شد");
@@ -248,6 +278,25 @@ test("چرخهٔ کامل: نصب با کلیک → سرویسِ واقعی → 
     encoding: "utf8", timeout: 30_000,
   });
   expect(ready.stdout).toContain("accepting connections");
+
+  // رمزی که در پنجره دیدیم باید همانی باشد که سرویس واقعاً قبول می‌کند —
+  // وگرنه «نصب شد»ِ صفحه ادعای بی‌مدرک است.
+  const auth = spawnSync("docker", [
+    "exec", "-e", `PGPASSWORD=${password}`, "clickedapp-postgres-1",
+    "psql", "-h", "127.0.0.1", "-U", "app", "-d", "app", "-c", "select 1;",
+  ], { encoding: "utf8", timeout: 30_000 });
+  expect(auth.status, auth.stderr).toBe(0);
+
+  // و در .env نشسته باشد، ولی در .env.example هرگز — آن فایل کامیت می‌شود.
+  const dotenv = readFileSync(join(project, ".env"), "utf8");
+  expect(dotenv).toContain(`POSTGRES_PASSWORD=${password}`);
+  expect(dotenv).toContain(`app:${password}@`);
+  expect(readFileSync(join(project, ".env.example"), "utf8")).not.toContain(password);
+
+  // فایلِ compose باید ارجاع بدهد، نه رمز را در خودش داشته باشد.
+  const compose = readFileSync(join(project, "deployment", "docker-compose.yml"), "utf8");
+  expect(compose).not.toContain(password);
+  expect(compose).toContain("${POSTGRES_PASSWORD}");
 
   // و تصمیم باید ثبت شده باشد
   const docs = readdirSync(join(project, "docs", "decisions"));
@@ -282,6 +331,7 @@ test("فرمان‌ها در ترمینال دیده می‌شوند — هیچ 
 
   const pg = option(await openGroup(category(page, "دیتابیس")), "PostgreSQL");
   await pg.getByRole("button", { name: "نصب کن" }).click();
+  await passSecretModal(page, "POSTGRES_PASSWORD");
   await expect(pg.locator(".chip.ok")).toBeVisible({ timeout: 90_000 });
 
   // متنِ ترمینال باید فرمانِ واقعیِ docker را نشان بدهد.
