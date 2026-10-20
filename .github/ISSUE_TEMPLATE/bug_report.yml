@@ -1,0 +1,23 @@
+name: Bug report / گزارش مشکل
+description: Report a reproducible problem / گزارش یک مشکل قابل تکرار
+body:
+  - type: input
+    id: environment
+    attributes:
+      label: Environment and version / محیط اجرا و نسخه
+      description: OS, browser or runtime versions relevant to the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce / مراحل بروز مشکل
+    validations:
+      required: true
+  - type: textarea
+    id: result
+    attributes:
+      label: Expected and actual result / نتیجه مورد انتظار و نتیجه واقعی
+      description: Screenshots or error messages help. Remove private data before attaching logs.
+    validations:
+      required: true
